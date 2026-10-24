@@ -93,6 +93,23 @@ main { display: grid; gap: 16px; padding: 16px 24px 40px; grid-template-columns:
 .msgs { flex: 1; overflow-y: auto; padding: 10px 2px; display: flex; flex-direction: column; gap: 10px; }
 .bubble { background: var(--bubble); border: 1px solid var(--border); border-radius: 16px 16px 16px 4px; padding: 9px 11px; font-size: 13.5px; white-space: pre-wrap; max-width: 92%; }
 .bubble.new { outline: 2px solid var(--series-1); }
+.row-me { display: flex; flex-direction: column; align-items: flex-end; }
+.bubble.me { background: var(--series-1); color: #fff; border-color: transparent; border-radius: 16px 16px 4px 16px; }
+.bubble.ai { border-color: var(--series-1); }
+.who { font-size: 11px; font-weight: 600; color: var(--series-1); margin: 0 4px 3px; }
+.how { font-size: 12px; color: var(--ink-2); margin: 4px 4px 0; max-width: 92%; }
+.how summary { cursor: pointer; color: var(--ink-2); }
+.how ol { margin: 4px 0 0; padding-left: 18px; }
+.how li { margin: 2px 0; }
+.how .ok { color: var(--good-text); }
+.mode { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 999px; font-size: 11px; background: var(--surface); border: 1px solid var(--border); }
+.typing { color: var(--muted); font-size: 13px; padding: 4px 6px; }
+.chips { display: flex; gap: 6px; overflow-x: auto; padding: 8px 0 6px; border-top: 1px solid var(--border); }
+.chips button { flex: 0 0 auto; font-size: 12px; padding: 5px 9px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); cursor: pointer; }
+.ask { display: flex; gap: 6px; }
+.ask input { flex: 1; min-width: 0; font: inherit; font-size: 14px; padding: 9px 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); color: var(--ink); }
+.ask button { border: 0; border-radius: 999px; padding: 0 14px; background: var(--series-1); color: #fff; font-weight: 600; cursor: pointer; }
+.ask button:disabled { opacity: .5; cursor: default; }
 .meta { font-size: 11px; color: var(--muted); margin: 2px 4px 0; }
 .empty { color: var(--muted); font-size: 13px; text-align: center; margin: auto 0; }
 
@@ -178,10 +195,15 @@ th, td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--grid
 
   <section class="card" id="c-phone">
     <h2>Their phone</h2>
-    <p class="lede">The texts they'd get. Plain SMS works with no Wi-Fi and any phone.</p>
+    <p class="lede">The texts they'd get, and a chat with the AI concierge. Ask it anything; it answers as of the storm clock above.</p>
     <div class="phone">
-      <div class="bar">Outage Concierge</div>
-      <div class="msgs" id="msgs"></div>
+      <div class="bar">Outage Concierge <span class="mode" id="ai-mode">…</span></div>
+      <div class="msgs" id="msgs" aria-live="polite"></div>
+      <div class="chips" id="chips"></div>
+      <form class="ask" id="ask">
+        <input id="ask-in" autocomplete="off" placeholder="Ask about your power…" aria-label="Ask the outage concierge">
+        <button id="ask-go" type="submit">Send</button>
+      </form>
     </div>
   </section>
 
@@ -253,7 +275,8 @@ th, td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--grid
 const START = new Date("2026-10-25T14:00:00");
 const PRE_H = 18;
 const S = { personas: [], persona: null, t: -PRE_H, whatIf: { crews: null, poles: 0, access: 1 },
-            replay: null, tree: [], map: [], pre: null, why: null, backtest: null, calibrated: true, playing: null, lastEventCount: 0 };
+            replay: null, tree: [], map: [], pre: null, why: null, backtest: null, calibrated: true, playing: null, lastEventCount: 0,
+            chat: [], pending: false, convo: Math.random().toString(36).slice(2) };
 const $ = (id) => document.getElementById(id);
 const api = (p) => fetch(p).then(r => { if (!r.ok) throw new Error(p + " " + r.status); return r.json(); });
 const esc = (s) => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
@@ -300,6 +323,8 @@ async function init() {
   $("poles").oninput = () => { $("poles-v").textContent = $("poles").value; S.whatIf.poles = +$("poles").value; debounceReplay(); };
   $("t").oninput = () => { stopPlay(); S.t = +$("t").value; renderTime(); };
   $("play").onclick = togglePlay;
+  $("ask").onsubmit = e => { e.preventDefault(); sendChat($("ask-in").value); };
+  api("/api/chat/status").then(st => { $("ai-mode").textContent = { ai: "AI on", simulated: "Simulated AI", keyword: "Keyword mode" }[st.mode]; $("ai-mode").title = st.mode === "ai" ? "Answers by " + st.model : st.mode === "simulated" ? "Stand-in for Claude (no API key)" : "Set ANTHROPIC_API_KEY to turn on the AI"; });
   window.addEventListener("resize", () => { renderCone(); renderMap(); renderStrip(); });
   await selectPersona(personas[0]);
   loadStrip();
@@ -313,7 +338,7 @@ function segment(id, onPick) {
 }
 
 async function selectPersona(p) {
-  S.persona = p;
+  S.persona = p; S.chat = []; S.convo = Math.random().toString(36).slice(2);
   const pid = encodeURIComponent(p.premise_id);
   const [tree, pre, why] = await Promise.all([api(`/api/premises/${pid}/tree`), api(`/api/premises/${pid}/card/pre_storm`), api(`/api/premises/${pid}/card/why`)]);
   S.tree = tree; S.pre = pre; S.why = why;
@@ -368,7 +393,7 @@ function renderTime() {
   else if (R && R.status === "ok" && t >= R.restored_h) phase = `Storm hour ${t} · power restored`;
   else phase = `Storm hour ${t} · power on`;
   $("phase").textContent = phase;
-  renderLanes(); renderPhone(); renderTree(); paintMapOutages(); moveConeCursor();
+  renderLanes(); renderPhone(); renderChips(); renderTree(); paintMapOutages(); moveConeCursor();
 }
 
 function latestEvent(t) {
@@ -417,11 +442,73 @@ function renderPhone() {
   const t = S.t, R = S.replay, el = $("msgs");
   const items = [{ at: "Sat 8pm", text: S.pre.text, seg: S.pre.segments }];
   if (S.pre.card.risk || S.pre.card.fallback) {} // pre-storm alert always shown for the demo
-  if (R && R.status === "ok") for (const e of R.events) if (e.t <= t) items.push({ at: e.clock, text: e.text, seg: e.segments, kind: e.kind });
-  const html = items.map((m, i) => `<div><div class="bubble ${i === items.length - 1 && i >= S.lastEventCount && i > 0 ? "new" : ""}">${esc(m.text)}</div><div class="meta">${esc(m.at)} · ${m.seg} SMS</div></div>`).join("");
+  if (R && R.status === "ok") for (const e of R.events) if (e.t <= t) items.push({ t: e.t, at: e.clock, text: e.text, seg: e.segments, kind: e.kind });
+  items[0].t = -PRE_H - 1;
+  const all = [...items, ...S.chat].sort((a, b) => a.t - b.t || (a.order || 0) - (b.order || 0));
+  const html = all.map((m, i) => m.role ? chatHtml(m) : `<div><div class="bubble ${i === all.length - 1 && all.length > S.lastEventCount && i > 0 && !S.chat.length ? "new" : ""}">${esc(m.text)}</div><div class="meta">${esc(m.at)} · ${m.seg} SMS</div></div>`).join("")
+    + (S.pending ? `<div class="typing">Concierge is checking…</div>` : "");
   el.innerHTML = html || `<div class="empty">No texts yet.</div>`;
-  if (items.length !== S.lastEventCount) el.scrollTop = el.scrollHeight;
-  S.lastEventCount = items.length;
+  S.lastEventCount = all.length + (S.pending ? 1 : 0) - 1;
+  if (all.length !== S._shown) el.scrollTop = el.scrollHeight;
+  S._shown = all.length;
+}
+
+// ---------- AI chat ----------
+const SOURCE_LABEL = { ai: "AI", simulated: "Simulated AI (no API key)", keyword: "Keyword bot", fallback: "Keyword bot (AI unavailable)", rejected: "Keyword bot (AI answer failed a check)", safety_gate: "Safety message (no AI)" };
+function stepSummary(s) {
+  const r = s.result || {};
+  if (s.tool === "what_if") {
+    const i = s.input || {}, bits = [];
+    if (i.crews) bits.push(i.crews + " crew" + (i.crews > 1 ? "s" : ""));
+    if (i.extra_poles) bits.push(i.extra_poles + " extra pole" + (i.extra_poles > 1 ? "s" : ""));
+    if (i.roads_blocked) bits.push("roads blocked");
+    return (bits.join(", ") || "what-if") + (r.restoration ? " → window " + r.restoration.window : "");
+  }
+  if (r.restoration && s.tool === "get_outage_status") return "window " + r.restoration.window + ", likely " + r.restoration.likely;
+  if (r.risk && s.tool === "get_outage_status") return "risk " + r.risk.band + " (" + r.risk.confidence + " confidence)";
+  if (s.tool === "get_storm_plan" && r.power_budget) return r.power_budget.length + " timeline items, " + (r.actions || []).length + " actions";
+  if (s.tool === "explain_estimate" && r.honesty) return r.honesty;
+  if (s.tool === "request_human") return "callback requested";
+  return "";
+}
+function chatHtml(m) {
+  if (m.role === "me") return `<div class="row-me"><div class="bubble me">${esc(m.text)}</div><div class="meta">${esc(m.at)}</div></div>`;
+  const steps = m.steps || [];
+  const how = steps.length || m.source === "safety_gate" || m.source === "rejected"
+    ? `<details class="how" ${m === S.chat.filter(x => x.role === "ai").slice(-1)[0] ? "open" : ""}><summary>How I answered${steps.length ? " · " + steps.length + " check" + (steps.length > 1 ? "s" : "") : ""}</summary><ol>`
+      + steps.map(s => `<li>${esc(s.label)}${stepSummary(s) ? ": " + esc(stepSummary(s)) : ""}</li>`).join("")
+      + (m.grounded ? `<li class="ok">✓ Every number in this answer came from these checks</li>` : "")
+      + (m.source === "rejected" ? `<li>The AI's answer used a number our engine didn't give it (${esc((m.ungrounded_numbers || []).join(", "))}), so it was replaced.</li>` : "")
+      + (m.source === "safety_gate" ? `<li>Safety words detected: this pre-approved message skips the AI entirely.</li>` : "")
+      + `</ol></details>` : "";
+  return `<div><div class="who">${esc(SOURCE_LABEL[m.source] || m.source)}</div><div class="bubble ai">${esc(m.text)}</div><div class="meta">${esc(m.at)}</div>${how}</div>`;
+}
+const CHIPS_PRE = ["Will I lose power?", "I use a CPAP machine. Should we stay somewhere else tonight?", "Do I qualify for outage alerts?", "Where should I put my generator?"];
+const CHIPS_OUT = ["When will my power be back?", "Why is it taking so long?", "What if only 1 crew was working on it?", "My CPAP battery lasts 8 hours. What should I do?"];
+function renderChips() {
+  const list = S.t < 0 ? CHIPS_PRE : CHIPS_OUT;
+  $("chips").innerHTML = list.map(c => `<button type="button">${esc(c)}</button>`).join("");
+  $("chips").querySelectorAll("button").forEach(b => b.onclick = () => sendChat(b.textContent));
+}
+async function sendChat(text) {
+  text = text.trim();
+  if (!text || S.pending) return;
+  stopPlay();
+  const at = clockAt(S.t), order = Date.now();
+  S.chat.push({ role: "me", text, t: S.t, at, order });
+  S.pending = true; $("ask-go").disabled = true; $("ask-in").value = ""; renderPhone();
+  try {
+    const w = S.whatIf;
+    const res = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ premise_id: S.persona.premise_id, message: text, conversation_id: S.convo, t: S.t,
+                             crews: w.crews, extra_poles: w.poles, access: w.access }) });
+    if (!res.ok) throw new Error("chat " + res.status);
+    const r = await res.json();
+    S.chat.push({ role: "ai", text: r.text, source: r.source, steps: r.steps, grounded: r.grounded, ungrounded_numbers: r.ungrounded_numbers, t: S.t, at, order: order + 1 });
+  } catch (e) {
+    S.chat.push({ role: "ai", text: "Sorry, I couldn't reach the concierge. Text HELP to reach a person.", source: "fallback", t: S.t, at, order: order + 1 });
+  }
+  S.pending = false; $("ask-go").disabled = false; renderPhone();
 }
 
 const STATUS = {

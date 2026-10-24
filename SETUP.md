@@ -2,7 +2,7 @@
 
 Hack/OHIO 2026 · AEP Challenge. The concept is in [README.md](README.md); the updated plan is in [PLAN.md](PLAN.md).
 
-An outage assistant that works over plain SMS and voice, with a deterministic engine that owns every number and an optional AI layer that only rewrites the wording.
+An outage assistant that works over plain SMS, voice and a web chat. A deterministic engine owns every number; an AI concierge (Claude) answers free-form questions by calling that engine as tools.
 
 ## Quick start
 
@@ -11,11 +11,28 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 .venv/bin/python -m concierge.mockdata      # (re)build the fake dataset in data/mock/
 .venv/bin/python scripts/demo.py            # play the 3-minute demo story
 .venv/bin/python scripts/sms_sim.py         # text the bot from your terminal (you are Maria)
-.venv/bin/python -m pytest                  # 24 tests
-.venv/bin/uvicorn concierge.api:app --reload  # API at http://127.0.0.1:8000/docs
+.venv/bin/python -m pytest                  # 30 tests
+.venv/bin/uvicorn concierge.api:app --port 8000  # web view at http://localhost:8000
 ```
 
-Optional AI wording: set `CONCIERGE_USE_LLM=1` and `ANTHROPIC_API_KEY`. Without them, templates are used and everything still works. AI text is thrown away if it contains any number that isn't in the fact card, runs over the SMS budget, or reads above grade ~8.
+## Turning on the AI concierge
+
+Set a Claude API key before starting the server:
+
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...   # never commit this
+.venv/bin/uvicorn concierge.api:app --port 8000
+```
+
+The phone panel's badge then says **AI on**. Without a key it says **Keyword mode** and everything still works with fixed answers. For offline testing, `CONCIERGE_FAKE_CLAUDE=1` uses a stand-in that follows the same tool-calling steps (badge: **Simulated AI**).
+
+How it stays safe (`concierge/agent.py`):
+- Danger words ("wire down", "smell gas"...) never reach the AI: a fixed safety message goes out instead.
+- The AI's tools are locked to the customer's own account and return privacy-filtered fact cards.
+- Every number in an AI answer must appear in a tool result or the customer's own message; otherwise the answer is thrown away and a template answer is sent. The chat shows "How I answered" with each check it ran.
+- Over SMS, one-word commands (WHY, PLAN...) and short questions use the fast keyword path; longer free-form texts go to the AI.
+
+Optional: `CONCIERGE_USE_LLM=1` also lets Claude reword the fixed alert texts (same number check).
 
 ## Layout
 
@@ -30,6 +47,7 @@ Optional AI wording: set `CONCIERGE_USE_LLM=1` and `ANTHROPIC_API_KEY`. Without 
 | `concierge/rules.py` | Alert eligibility, timing, channel, escalation rules R1–R7 | AI + rules |
 | `concierge/safety.py` | Danger keywords (no AI in the loop) + guardrails | AI + rules |
 | `concierge/factcard.py` | Privacy firewall: key whitelist, ID/phone/coordinate blocker, audit log | AI + rules |
+| `concierge/agent.py` | AI concierge: Claude + engine tools, grounding check, fallbacks | AI + rules |
 | `concierge/narrate.py` | Templates, SMS segment counter, reading level, optional Claude rewrite with checks | AI + rules |
 | `concierge/prep.py` | Prep actions + power-budget timeline (declared needs only) | AI + rules |
 | `concierge/service.py` | Demo storm clock, what-ifs, fact cards, proactive alerts | Channels |

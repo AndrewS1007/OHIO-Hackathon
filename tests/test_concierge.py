@@ -151,3 +151,68 @@ def test_web_view_endpoints():
     raw = c.get("/api/backtest/cases?calibrated=false").json()
     cal = c.get("/api/backtest/cases").json()
     assert sum(x["inside"] for x in cal) > sum(x["inside"] for x in raw)
+
+
+# ---------- AI concierge ----------
+
+from types import SimpleNamespace as NS
+
+from concierge import agent
+from concierge.fake_claude import FakeClaude
+
+
+def _ctx(t=None):
+    w = service.World() if t is None else service.World("outage", t)
+    return agent.ChatContext(MARIA, w, who="test")
+
+
+def test_ai_answers_from_tools_and_is_grounded():
+    r = agent.answer("t1", "what if only 1 crew was working on it?", _ctx(7.0), client=FakeClaude())
+    assert r["grounded"] and r["source"] in ("ai", "simulated")
+    assert [s["tool"] for s in r["steps"]] == ["get_outage_status", "what_if"]
+    assert "Mon" in r["text"]
+
+
+class _Liar:
+    """Calls a tool, then invents a time the tools never gave."""
+    def __init__(self):
+        self.n = 0
+        self.beta = NS(messages=self)
+
+    def create(self, **kw):
+        self.n += 1
+        if self.n == 1:
+            return NS(stop_reason="tool_use", content=[NS(type="tool_use", id="x", name="get_outage_status", input={})])
+        return NS(stop_reason="end_turn", content=[NS(type="text", text="Back at exactly 4:17pm, promise.")])
+
+
+def test_ai_answer_with_invented_number_is_replaced():
+    r = agent.answer("t2", "when is it back?", _ctx(7.0), client=_Liar())
+    assert r["source"] == "rejected" and "17" in r["ungrounded_numbers"]
+    assert "4:17" not in r["text"] and "HELP" in r["text"]
+
+
+class _Broken:
+    beta = NS(messages=NS(create=lambda **kw: (_ for _ in ()).throw(ConnectionError("offline"))))
+
+
+def test_ai_outage_falls_back_to_keyword_answer():
+    r = agent.answer("t3", "when is it back?", _ctx(7.0), client=_Broken())
+    assert r["source"] == "fallback" and r["text"]
+    assert agent.CONVERSATIONS["t3"].messages == []  # the failed turn left no half-written history
+
+
+def test_tools_only_see_own_account():
+    names = {t["name"] for t in agent.TOOLS}
+    for t in agent.TOOLS:  # no tool takes an address, premise, or customer id
+        assert not set(t["input_schema"]["properties"]) & {"premise_id", "address", "customer", "phone"}
+    assert "get_outage_status" in names
+
+
+def test_chat_endpoint_safety_gate_skips_ai(monkeypatch):
+    monkeypatch.setenv("CONCIERGE_FAKE_CLAUDE", "1")
+    c = TestClient(app)
+    r = c.post("/api/chat", json={"premise_id": MARIA["premise_id"], "message": "a wire is down and sparking", "conversation_id": "x", "t": 5}).json()
+    assert r["source"] == "safety_gate" and "911" in r["text"]
+    r = c.post("/api/chat", json={"premise_id": MARIA["premise_id"], "message": "Why is it taking so long?", "conversation_id": "x", "t": 7}).json()
+    assert r["source"] == "simulated" and r["grounded"]
