@@ -152,7 +152,7 @@ def _llm_rewrite(card: dict, draft: str, max_chars: int) -> str | None:
         response = httpx.post(
             f"{ollama_url}/api/chat",
             json={
-                "model": "qwen2.5:3b",
+                "model": "qwen2.5:7b",
                 "messages": [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
