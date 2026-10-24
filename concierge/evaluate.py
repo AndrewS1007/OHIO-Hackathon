@@ -21,13 +21,14 @@ import numpy as np
 import pandas as pd
 from sklearn.metrics import roc_auc_score
 
-from . import agent, backtest, delays, narrate, replay, risk, safety, service, views
+from . import agent, backtest, narrate, replay, risk, safety, service, views
 from .config import ROOT
 from .data import Dataset, get_dataset
 from .factcard import PrivacyError
-from .restoration import estimate, prestorm_scenario
+from .restoration import apply_calibration, estimate, prestorm_scenario
 
 STORM_FREE_FEATURES = ["overhead_pct", "length_mi", "hist_path_rate"]
+LARGE_STORM_FACTOR = 3  # for the report's breakdown: a storm with 3x the median storm's damage records is "large"
 
 
 # ---------- 1. Will I lose power? ----------
@@ -100,11 +101,15 @@ def _restore_scores(df: pd.DataFrame) -> dict:
 
 
 def _calibrated(df: pd.DataFrame, calib: dict) -> pd.DataFrame:
-    return backtest._score(df, calib)
+    """Apply one flat set of calibration offsets to every case."""
+    adj = [apply_calibration({"p10": r.p10, "p50": r.p50, "p90": r.p90}, calib, r.now_h) for r in df.itertuples()]
+    return df.assign(**{k: [a[k] for a in adj] for k in ("p10", "p50", "p90")})
 
 
 def storm_sizes(ds: Dataset) -> dict[str, str]:
-    return delays.storm_sizes(ds)
+    n = ds.damage.groupby("event_id").size().reindex(ds.storms.event_id, fill_value=0)
+    cut = LARGE_STORM_FACTOR * n.median()
+    return {ev: "large" if k >= cut else "small" for ev, k in n.items()}
 
 
 def restoration_eval(ds: Dataset) -> tuple[dict, pd.DataFrame]:
@@ -113,21 +118,18 @@ def restoration_eval(ds: Dataset) -> tuple[dict, pd.DataFrame]:
     cases["size"] = cases.event_id.map(size)
     variants = {"raw": cases.copy()}
 
-    # As the app does today: calibrate on the oldest 60% of storms, score on the newest 40%.
-    calib_evs, test_evs = backtest._split(ds)
-    variants["time_split_calibration"] = _calibrated(cases[cases.event_id.isin(test_evs)], backtest.calibration(ds))
+    # The backtest's size-aware calibration, each storm calibrated by the others; the app uses it only if it helps.
+    _, cal = backtest.leave_one_storm_out(ds)
+    keep = ["event_id", "circuit_id", "now_h", "p10", "p50", "p90", "actual"]
+    variants["loso_calibration_by_storm_size"] = cal[keep].assign(size=cal.event_id.map(size))
+    uses_cal = backtest.run(ds)["uses_calibration"]
+    variants["app"] = variants["loso_calibration_by_storm_size"] if uses_cal else cases.copy()
 
-    def loso(same_size: bool) -> pd.DataFrame:
-        parts = []
-        for ev, g in cases.groupby("event_id"):
-            pool = cases[(cases.event_id != ev) & ((cases["size"] == size[ev]) if same_size else True)]
-            if len(pool) < 10:
-                pool = cases[cases.event_id != ev]
-            parts.append(_calibrated(g, backtest.fit_calibration(pool)))
-        return pd.concat(parts)
-
-    variants["loso_calibration"] = loso(False)
-    variants["loso_calibration_by_storm_size"] = loso(True)
+    # One flat calibration for all storm sizes, each storm left out.
+    parts = []
+    for ev, g in cases.groupby("event_id"):
+        parts.append(_calibrated(g, backtest.fit_calibration(cases[cases.event_id != ev])))
+    variants["loso_calibration"] = pd.concat(parts)
 
     # Baseline with no model: the spread of restoration times seen in other storms of the same size.
     parts = []
@@ -144,6 +146,7 @@ def restoration_eval(ds: Dataset) -> tuple[dict, pd.DataFrame]:
     out["per_storm"] = [{"event_id": ev, "storm": names[ev], "size": size[ev], **_restore_scores(g)}
                         for ev, g in variants["raw"].groupby("event_id")]
     out["storm_sizes"] = size
+    out["app_uses_calibration"] = bool(uses_cal)
     long = pd.concat([v.assign(variant=k) for k, v in variants.items()])
     return out, long[["variant", "event_id", "size", "circuit_id", "now_h", "p10", "p50", "p90", "actual"]]
 
@@ -279,7 +282,7 @@ def _pct(x):
 
 def markdown(r: dict) -> str:
     rk, rs, tl, sf, rp = r["risk"], r["restoration"], r["tools"], r["safety"], r["replay"]
-    app = rs["time_split_calibration"]["all"]
+    app = rs["app"]["all"]
     raw = rs["raw"]["all"]
     base = rs["baseline_no_model"]["all"]
     honest = rk["path_history_only"]
@@ -295,8 +298,10 @@ def markdown(r: dict) -> str:
          f"(the customer waited longer than our latest time). Median range {raw['median_range_width_h']} h wide.",
          f"- **Versus no model** (just past storms' spread): {_pct(base['coverage'])} inside, too optimistic "
          f"{_pct(base['broken_promises'])}, median range {base['median_range_width_h']} h wide.",
-         f"- **With the app's calibration on top:** {_pct(app['coverage'])} inside, too optimistic "
-         f"{_pct(app['broken_promises'])}, but median range {app['median_range_width_h']} h wide.",
+         (f"- **The app shows these raw ranges:** calibrating them didn't get closer to 80% on storms it never saw."
+          if not rs["app_uses_calibration"] else
+          f"- **What the app shows (calibrated):** {_pct(app['coverage'])} inside, too optimistic "
+          f"{_pct(app['broken_promises'])}, median range {app['median_range_width_h']} h wide."),
          f"- **Safety:** {_pct(sf['danger_caught'])} of danger texts got the 911 message with no AI involved; "
          f"{_pct(sf['normal_questions_answered'])} of normal questions were answered (not refused).",
          f"- **Privacy:** {tl['tool_calls']} tool calls for {tl['customers_sampled']} customers, **{tl['id_leaks']} ID leaks**, "
@@ -326,8 +331,8 @@ def markdown(r: dict) -> str:
     L += ["", "## 2. When will it be back? (restoration ranges)", "",
           "| Method | Cases | Inside range | Too optimistic | Too pessimistic | P50 within 12 h | Median error | Median width |",
           "|---|---|---|---|---|---|---|---|"]
-    labels = {"raw": "Raw simulation", "time_split_calibration": "App today (calibrates only if it at most doubles width)",
-              "loso_calibration": "Calibrated, leave-one-storm-out", "loso_calibration_by_storm_size": "Calibrated by storm size",
+    labels = {"raw": "Raw simulation", "app": "What the app shows" + (" (calibrated)" if rs["app_uses_calibration"] else " (raw)"),
+              "loso_calibration": "Calibrated, one set for all storms", "loso_calibration_by_storm_size": "Calibrated by storm size",
               "baseline_no_model": "Baseline: past storms' spread, no model"}
     for k, label in labels.items():
         s = rs[k]["all"]
@@ -345,8 +350,8 @@ def markdown(r: dict) -> str:
           f"- full storm replay with texts: {rp.get('seconds_to_replay')} s",
           "", "## Caveats (say these out loud)", "",
           "- ARCOS has dates, not times, so restoration times are only accurate to about half a day.",
-          "- The restoration model learns when damage gets reported and how long repairs wait from the other storms "
-          "(never the one being scored). Large storms have only 2-3 examples, so their delays are uncertain.",
+          "- The restoration model learns how long repairs wait for a crew from the other storms of the same size "
+          "(never the one being scored). Large storms have only 2-3 examples, so their waits are uncertain.",
           "- There's no weather data in the package. \"Storm size\" is assumed from each storm's damage, so the "
           "\"+ storm size\" risk model is an upper bound: it stands in for a good wind forecast.",
           "- One storm (Feb 2025) is most of the data, so the overall numbers mostly describe big storms. Small storms "

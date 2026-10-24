@@ -262,3 +262,74 @@ def test_thread_endpoint():
     client.post("/api/sms/simulate", json={"phone": "+16145550104", "body": "DEMO"})
     t = client.get("/api/sms/thread/+16145550104").json()
     assert t[0]["dir"] == "in" and t[0]["text"] == "DEMO"
+
+
+# ---------- honesty score: leave-one-storm-out + size-aware calibration ----------
+
+from concierge import backtest
+from concierge.restoration import pick_calibration
+
+
+def test_backtest_scores_every_storm_left_out():
+    r = backtest.run()
+    assert r["method"] == "leave-one-storm-out"
+    stormed = {s["event_id"] for s in r["per_storm"]}
+    assert stormed == set(backtest.cases().event_id)  # every storm with outages gets its own row
+    assert sum(s["calibrated"]["cases"] for s in r["per_storm"]) == r["calibrated_on_test"]["cases"]
+
+
+def test_calibration_never_sees_the_storm_it_scores(monkeypatch):
+    seen = []
+    real_fit = backtest.fit_by_size
+    monkeypatch.setattr(backtest, "fit_by_size", lambda df: (seen.append(set(df.event_id)), real_fit(df))[1])
+    backtest.leave_one_storm_out.cache_clear()
+    try:
+        backtest.leave_one_storm_out()
+        all_storms = set(backtest.cases().event_id)
+        assert len(seen) == len(all_storms)
+        assert all(len(all_storms - s) == 1 for s in seen)  # each fit is missing exactly one storm
+    finally:
+        backtest.leave_one_storm_out.cache_clear()
+
+
+def test_thin_history_falls_back_and_says_so():
+    model = {"pooled": {"p10": -0.2, "p50": 0.2, "p90": 1.0}, "small": {"p10": -0.1, "p50": 0.1, "p90": 0.5},
+             "large": None, "support": {"small": 200, "large": 3}}
+    offsets, info = pick_calibration(model, 5000)  # a huge storm we have little history for
+    assert offsets == model["pooled"] and info["thin_history"]
+    offsets, info = pick_calibration(model, 10)
+    assert offsets == model["small"] and not info["thin_history"]
+
+
+def test_backtest_is_cached_to_disk():
+    files = list(backtest.CACHE_DIR.glob("backtest_cases_*.csv"))
+    assert files, "first run should write the cache"
+
+
+# ---------- crew waits learned from past storms ----------
+
+from concierge.restoration import fit_start_delays
+
+
+def test_learned_waits_leave_the_predicted_storm_out():
+    all_waits = fit_start_delays(DS)
+    without = fit_start_delays(DS, exclude_event="E07")
+    n_e07 = int((DS.damage.event_id == "E07").sum())
+    assert len(all_waits) - len(without) == n_e07  # E07's own repairs aren't used to predict E07
+    assert (without >= 0).all()
+
+
+def test_fewer_crews_means_longer_wait():
+    from concierge.replay import scenario_at
+    p = MARIA["premise_id"]
+    p50 = lambda w: estimate(p, scenario_at(DS, p, "E07", 7.0, w), n_sims=400, seed=1)["hours_from_now"]["p50"]
+    assert p50({"crews": 1}) > p50(None) > p50({"crews": 5})
+
+
+def test_waits_can_be_learned_per_storm_size(monkeypatch):
+    monkeypatch.setenv("CONCIERGE_LARGE_STORM_REPORTS", "100")
+    small = fit_start_delays(DS, size="small")
+    large = fit_start_delays(DS, size="large")
+    pooled = fit_start_delays(DS)
+    assert small is not None and large is not None
+    assert len(small) + len(large) == len(pooled)  # every past repair lands in exactly one size group

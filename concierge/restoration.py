@@ -1,17 +1,14 @@
 """Restoration engine: "How long could restoration take?"
 
-Monte Carlo over repair jobs. Each run:
+Monte Carlo over crew schedules. Each run:
   1. job hours = (labor hours x quantity + access adders) x indirect multipliers x access x noise
-  2. not-yet-found damage is added at random
-  3. this premise is back when every job on its upline path is done
+  2. jobs can't start until a crew gets to them: the wait from report to start
+     is drawn from what past storms' records show (backlog, dispatch, materials,
+     travel), learned without the storm being predicted; 1-3 h if no history
+  3. not-yet-found damage is added at random (fewer as the storm ages)
+  4. crews take jobs critical-facility first, then upstream first (step restoration)
+  5. this premise is back when every job on its upline path is done
 The spread across ~1,000 runs gives P10 / P50 / P90.
-
-Two ways to time the jobs:
-  - With learned delays (Scenario.delays, from past storms; see delays.py): damage not found yet
-    gets a report time drawn from when past storms' damage was reported, and each job waits a
-    learned time (assessment, queue, logistics) before its work, scaled by crews vs. the usual crews.
-  - Without (scenarios built by hand): jobs are assessed 1-3 h after reporting, unfound damage
-    turns up within 6 h, and crews take jobs critical-facility first, then upstream first.
 """
 from __future__ import annotations
 
@@ -23,7 +20,6 @@ from functools import lru_cache
 import numpy as np
 
 from .data import DEPTH, Dataset, get_dataset
-from .delays import Delays, learn, size_for_wind
 
 NOISE_SIGMA = 0.35
 DAMAGE_WORDS = {
@@ -64,8 +60,10 @@ class Scenario:
     now_h: float = 0.0
     hidden_lambda: float = 1.0  # expected not-yet-found damage jobs on the circuit
     jobs: list[Job] = field(default_factory=list)
-    delays: Delays | None = None  # learned from past storms; None = the fixed assumptions
-    base_crews: int | None = None  # crews the learned waits reflect (what-if crews scale waits against it)
+    system_reports: int | None = None  # damage reports so far across the whole system (storm size, known live)
+    start_delays: np.ndarray | None = None  # past report-to-work-start waits (hours) to sample from
+    crews_baseline: int | None = None  # crews as recorded/assumed, before any what-if
+    known_out: bool = False  # we know this customer is without power right now (meters, calls)
 
 
 def damage_label(damage_type: str, n: int) -> str:
@@ -120,38 +118,44 @@ def simulate(premise_id: str, sc: Scenario, n_sims: int = 1000, seed: int = 0, d
     r_report = np.array([j.report_h for j in jobs])
     r_done = np.array([j.done for j in jobs], dtype=bool)
     r_on_path = np.array([j.device_id in path_set for j in jobs], dtype=bool)
+    path_dev_idx = np.flatnonzero(c_on_path & (c_depth >= 1))
+    force_path = sc.known_out and not (r_on_path & ~r_done).any() and len(path_dev_idx) > 0
     restore, stage1, any_on_path = [], [], 0
     for _ in range(n_sims):
         # Schedule the whole storm from its start (done jobs included, since they used
         # crew time), so an estimate counts down on its own as hours pass.
         k = rng.poisson(sc.hidden_lambda)
         dev_i = rng.integers(len(c_devs), size=k)
+        if force_path:
+            # They're out but nothing open is reported on their line yet: the cause is still
+            # to be found, somewhere on their path. Add it, reported now.
+            k += 1
+            dev_i = np.append(dev_i, path_dev_idx[rng.integers(len(path_dev_idx))])
         depth = np.concatenate([r_depth, c_depth[dev_i]])
         is_prio = np.concatenate([r_prio, c_prio[dev_i]])
         hours = np.concatenate([r_hours, hidden_hours[rng.integers(len(hidden_types), size=k)]])
-        d = sc.delays
-        hidden_report = d.sample_lags_after(rng, sc.now_h, k) if d else sc.now_h + rng.uniform(0.5, 6, size=k)
-        report = np.concatenate([r_report, hidden_report])
+        report = np.concatenate([r_report, sc.now_h + rng.uniform(0.5, 6, size=k)])
         done = np.concatenate([r_done, np.zeros(k, dtype=bool)])
         on_path = np.concatenate([r_on_path, c_on_path[dev_i]])
-        dur = hours * sc.access * rng.lognormal(0, NOISE_SIGMA, size=len(report))
-        if d:
-            # Learned waits already include queueing behind other jobs, so no crew schedule here;
-            # fewer crews than usual stretch the wait, more crews shrink it.
-            scale = (sc.base_crews or sc.crews) / max(1, sc.crews)
-            finish = report + d.sample_waits(rng, len(report)) * scale + dur
-            late = ~done & (finish <= sc.now_h)  # still open, so it's taking longer than drawn
-            if late.any():
-                waited = sc.now_h - report[late]
-                finish[late] = np.maximum(report[late] + d.sample_waits_over(rng, waited / scale) * scale + dur[late],
-                                          sc.now_h + 0.25)
+        learned = sc.start_delays is not None and len(sc.start_delays) > 0
+        if learned:
+            # Repairs on one circuit in one storm wait similar amounts: one shared draw per run,
+            # plus a little spread (records only have dates, so +-12 h is within the noise).
+            wait = np.clip(rng.choice(sc.start_delays) + rng.uniform(-12, 12, size=len(report)), 0, None)
+            # Fewer crews than usual -> longer waits (and more crews -> shorter). Square root,
+            # not linear: only part of the wait is crews (the rest is materials, dispatch, travel).
+            wait = wait * (max(1, sc.crews_baseline or sc.crews) / max(1, sc.crews)) ** 0.5
         else:
-            avail = report + rng.uniform(1, 3, size=len(report))
-            order = np.lexsort((avail, depth, ~is_prio))  # critical facility first, then upstream first
-            finish = _schedule(order, avail, dur, max(1, sc.crews), 0.0)
-            # An open job the schedule says "should be done" isn't: it's running late.
-            late = ~done & (finish <= sc.now_h)
-            finish[late] = sc.now_h + rng.exponential(1.0, size=int(late.sum()))
+            wait = rng.uniform(1, 3, size=len(report))
+        avail = report + wait
+        dur = hours * sc.access * rng.lognormal(0, NOISE_SIGMA, size=len(report))
+        order = np.lexsort((avail, depth, ~is_prio))  # critical facility first, then upstream first
+        # Learned waits already include queuing for a crew, so don't queue twice.
+        n_crews = len(report) if learned else max(1, sc.crews)
+        finish = _schedule(order, avail, dur, n_crews, 0.0)
+        # An open job the schedule says "should be done" isn't: it's running late.
+        late = ~done & (finish <= sc.now_h)
+        finish[late] = sc.now_h + rng.exponential(1.0, size=int(late.sum()))
         mine = on_path & ~done
         if mine.any():
             any_on_path += 1
@@ -184,9 +188,13 @@ def drivers(premise_id: str, sc: Scenario, ds: Dataset | None = None) -> list[st
         groups[key] += j.quantity
         hours[key] += _job_hours(ds, j)
     out = [f"{damage_label(dt, n)} {WHERE_WORDS[dev]}" for (dt, dev), n in sorted(groups.items(), key=lambda kv: -hours[kv[0]])]
+    if sc.known_out and not groups:
+        out.insert(0, "crews haven't found the damage affecting you yet")
     other = sum(1 for j in sc.jobs if not j.done and j.device_id not in path)
     if other:
         out.append(f"{sc.crews} crew{'s' if sc.crews != 1 else ''} also fixing {other} other repair{'s' if other != 1 else ''} on your circuit")
+    if sc.start_delays is not None and len(sc.start_delays) and float(np.median(sc.start_delays)) >= 6:
+        out.append(f"in past storms, a repair like this usually waited about {round(float(np.median(sc.start_delays)))} h for a crew")
     if sc.access > 1.0:
         out.append("blocked or flooded roads are slowing crews")
     cid = ds.circuit_of(premise_id)
@@ -200,12 +208,38 @@ def apply_calibration(h: dict, calib: dict, now_h: float) -> dict:
 
     calib holds log-ratio quantiles of (actual / raw P50), both measured as hours
     since the storm started, so the new range is where reality actually landed
-    relative to our raw guess. Never earlier than about 20 minutes from now."""
+    relative to our raw guess. Never earlier than 15 minutes from now."""
     mid = max(now_h + h["p50"], 0.25)
     out = {k: max(round(mid * float(np.exp(calib[k])) - now_h, 1), 0.3) for k in ("p10", "p50", "p90")}
     out["p10"] = min(out["p10"], out["p50"])
     out["p90"] = max(out["p90"], out["p50"])
     return out
+
+
+LARGE_STORM_REPORTS = 100  # system-wide damage reports so far at which a storm counts as "large"
+MIN_BUCKET_CASES = 15  # fewer past outages than this in a size group -> use all storms, and say so
+
+
+def storm_size(system_reports: int | None) -> str | None:
+    import os
+    if system_reports is None:
+        return None
+    cut = int(os.environ.get("CONCIERGE_LARGE_STORM_REPORTS", LARGE_STORM_REPORTS))
+    return "large" if system_reports >= cut else "small"
+
+
+def pick_calibration(calib: dict, system_reports: int | None) -> tuple[dict, dict]:
+    """calib is either one set of offsets, or {"pooled", "small", "large", "support"} from the backtest.
+    Returns (offsets, info). info["thin_history"] is True when we haven't seen enough storms this size."""
+    if "pooled" not in calib:
+        return calib, {"group": "all", "thin_history": False}
+    size = storm_size(system_reports)
+    if size is None:
+        return calib["pooled"], {"group": "all", "thin_history": False}
+    n = calib["support"].get(size, 0)
+    if calib.get(size) and n >= MIN_BUCKET_CASES:
+        return calib[size], {"group": size, "thin_history": False, "past_cases": n}
+    return calib["pooled"], {"group": "all", "thin_history": True, "size": size, "past_cases": n}
 
 
 def estimate(premise_id: str, sc: Scenario, n_sims: int = 1000, seed: int = 0, ds: Dataset | None = None,
@@ -214,9 +248,11 @@ def estimate(premise_id: str, sc: Scenario, n_sims: int = 1000, seed: int = 0, d
     res = simulate(premise_id, sc, n_sims, seed, ds)
     res["now_h"] = sc.now_h
     if calib and res.get("hours_from_now"):
+        offsets, info = pick_calibration(calib, sc.system_reports)
         res["raw_hours_from_now"] = res["hours_from_now"]
-        res["hours_from_now"] = apply_calibration(res["hours_from_now"], calib, sc.now_h)
+        res["hours_from_now"] = apply_calibration(res["hours_from_now"], offsets, sc.now_h)
         res["calibrated"] = True
+        res["calibration"] = info
     res["drivers"] = drivers(premise_id, sc, ds)
     res["assumptions"] = {
         "crews": sc.crews,
@@ -260,18 +296,47 @@ def jobs_from_records(records) -> list[Job]:
                 incident_id=r.incident_id, extra_hours=float(getattr(r, "extra_hours", 0.0))) for r in records.itertuples()]
 
 
-def prestorm_scenario(premise_id: str, storm: dict, ds: Dataset | None = None, exclude: tuple[str, ...] = ()) -> Scenario:
+MIN_DELAY_RECORDS = 20  # fewer past repairs than this -> keep the simple 1-3 h assumption
+
+
+def fit_start_delays(ds: Dataset, exclude_event: str | None = None, size: str | None = None) -> np.ndarray | None:
+    """How long past repairs waited for a crew: (repaired - reported) minus the repair work itself.
+
+    exclude_event leaves one storm out, so an estimate for that storm (in the backtest
+    or the replay) never learns from the storm it's predicting.
+    size ("small"/"large") uses only past storms of that size: in the real records, repairs
+    in small storms waited much longer (median ~58 h vs ~33 h), likely because crews aren't
+    mobilized for them. Falls back to all storms if that size has too little history."""
+    cache = ds.__dict__.setdefault("_start_delays", {})
+    key = (exclude_event, size)
+    if key in cache:
+        return cache[key]
+    d = ds.damage if exclude_event is None else ds.damage[ds.damage.event_id != exclude_event]
+    d = d[d.damage_type.isin(list(ds.labor_hours))]
+    if size is not None:
+        totals = ds.damage.groupby("event_id").size()
+        same = d[d.event_id.map(totals).map(lambda n: storm_size(int(n))) == size]
+        if len(same) >= MIN_DELAY_RECORDS:
+            d = same
+    out = None
+    if len(d) >= MIN_DELAY_RECORDS:
+        extra = d["extra_hours"] if "extra_hours" in d else 0.0
+        work = (d.damage_type.map(ds.labor_hours) * d.quantity + extra) * float(np.prod(list(ds.indirect.values())))
+        elapsed = (d.repair_complete_time - d.report_time).dt.total_seconds() / 3600
+        out = np.clip((elapsed - work).to_numpy(dtype=float), 0.0, None)
+    cache[key] = out
+    return out
+
+
+def prestorm_scenario(premise_id: str, storm: dict, ds: Dataset | None = None) -> Scenario:
     """Before the storm: no reported damage yet, so everything is 'not yet found'
-    damage, sized from how much damage this circuit took in past storms of similar strength.
-    `exclude`: storms to leave out (a storm being backtested must not inform its own forecast)."""
+    damage, sized from how much damage this circuit took in past storms of similar strength."""
     ds = ds or get_dataset()
     cid = ds.circuit_of(premise_id)
-    storms = ds.storms.loc[~ds.storms.event_id.isin(exclude)]
-    past = storms.loc[(storms.max_wind_mph - storm["max_wind_mph"]).abs() <= 12, "event_id"]
+    past = ds.storms.loc[(ds.storms.max_wind_mph - storm["max_wind_mph"]).abs() <= 12, "event_id"]
     dmg = ds.damage.loc[(ds.damage.circuit_id == cid) & ds.damage.event_id.isin(past)]
     per_storm = len(dmg) / max(1, len(past))
     # Crews: what this circuit had in those storms, if recorded; otherwise the wind-based assumption.
     crews = dmg.crew_count.dropna()
     crews = int(round(crews.median())) if len(crews) else default_crews(storm["max_wind_mph"])
-    delays = learn(ds, size_for_wind(ds, storm["max_wind_mph"]), tuple(exclude))
-    return Scenario(crews=crews, hidden_lambda=max(1.0, per_storm), delays=delays, base_crews=crews)
+    return Scenario(crews=crews, crews_baseline=crews, hidden_lambda=max(1.0, per_storm), start_delays=fit_start_delays(ds))

@@ -1,5 +1,5 @@
 {
-  "generated": "2026-10-24 15:11",
+  "generated": "2026-10-24 15:26",
   "storm_names": {
     "E01": "Oct 2023 storm",
     "E02": "Jan 2024 storm",
@@ -277,149 +277,149 @@
     }
   },
   "speed": {
-    "risk_prediction_s": 0.12,
-    "prestorm_estimate_s": 0.64,
-    "mid_storm_estimate_s": 0.82
+    "risk_prediction_s": 0.11,
+    "prestorm_estimate_s": 1.71,
+    "mid_storm_estimate_s": 1.0
   },
   "restoration": {
     "raw": {
       "all": {
         "cases": 488,
-        "coverage": 0.539,
+        "coverage": 0.809,
         "broken_promises": 0.053,
-        "too_pessimistic": 0.408,
-        "p50_within_12h": 0.086,
-        "p50_within_24h": 0.207,
-        "median_abs_error_h": 48.5,
-        "median_bias_h": 42.5,
-        "median_range_width_h": 116.4
+        "too_pessimistic": 0.137,
+        "p50_within_12h": 0.193,
+        "p50_within_24h": 0.352,
+        "median_abs_error_h": 35.4,
+        "median_bias_h": -4.4,
+        "median_range_width_h": 118.7
       },
       "large": {
         "cases": 471,
-        "coverage": 0.546,
+        "coverage": 0.824,
         "broken_promises": 0.042,
-        "too_pessimistic": 0.412,
-        "p50_within_12h": 0.087,
-        "p50_within_24h": 0.202,
-        "median_abs_error_h": 48.6,
-        "median_bias_h": 47.0,
-        "median_range_width_h": 118.1
+        "too_pessimistic": 0.134,
+        "p50_within_12h": 0.2,
+        "p50_within_24h": 0.365,
+        "median_abs_error_h": 34.9,
+        "median_bias_h": -4.6,
+        "median_range_width_h": 118.7
+      },
+      "small": {
+        "cases": 17,
+        "coverage": 0.412,
+        "broken_promises": 0.353,
+        "too_pessimistic": 0.235,
+        "p50_within_12h": 0.0,
+        "p50_within_24h": 0.0,
+        "median_abs_error_h": 56.5,
+        "median_bias_h": 39.4,
+        "median_range_width_h": 116.2
+      }
+    },
+    "loso_calibration_by_storm_size": {
+      "all": {
+        "cases": 488,
+        "coverage": 0.971,
+        "broken_promises": 0.014,
+        "too_pessimistic": 0.014,
+        "p50_within_12h": 0.16,
+        "p50_within_24h": 0.293,
+        "median_abs_error_h": 42.3,
+        "median_bias_h": 38.8,
+        "median_range_width_h": 190.3
+      },
+      "large": {
+        "cases": 471,
+        "coverage": 0.994,
+        "broken_promises": 0.002,
+        "too_pessimistic": 0.004,
+        "p50_within_12h": 0.166,
+        "p50_within_24h": 0.304,
+        "median_abs_error_h": 41.2,
+        "median_bias_h": 38.5,
+        "median_range_width_h": 191.1
       },
       "small": {
         "cases": 17,
         "coverage": 0.353,
         "broken_promises": 0.353,
         "too_pessimistic": 0.294,
-        "p50_within_12h": 0.059,
-        "p50_within_24h": 0.353,
-        "median_abs_error_h": 27.5,
-        "median_bias_h": 18.9,
-        "median_range_width_h": 72.9
-      }
-    },
-    "time_split_calibration": {
-      "all": {
-        "cases": 454,
-        "coverage": 0.659,
-        "broken_promises": 0.0,
-        "too_pessimistic": 0.341,
-        "p50_within_12h": 0.022,
-        "p50_within_24h": 0.04,
-        "median_abs_error_h": 163.0,
-        "median_bias_h": 163.0,
-        "median_range_width_h": 274.6
-      },
-      "large": {
-        "cases": 448,
-        "coverage": 0.661,
-        "broken_promises": 0.0,
-        "too_pessimistic": 0.339,
-        "p50_within_12h": 0.022,
-        "p50_within_24h": 0.04,
-        "median_abs_error_h": 164.6,
-        "median_bias_h": 164.6,
-        "median_range_width_h": 275.9
-      },
-      "small": {
-        "cases": 6,
-        "coverage": 0.5,
-        "broken_promises": 0.0,
-        "too_pessimistic": 0.5,
         "p50_within_12h": 0.0,
         "p50_within_24h": 0.0,
-        "median_abs_error_h": 75.5,
-        "median_bias_h": 75.5,
-        "median_range_width_h": 124.1
+        "median_abs_error_h": 78.6,
+        "median_bias_h": 78.6,
+        "median_range_width_h": 134.0
+      }
+    },
+    "app": {
+      "all": {
+        "cases": 488,
+        "coverage": 0.809,
+        "broken_promises": 0.053,
+        "too_pessimistic": 0.137,
+        "p50_within_12h": 0.193,
+        "p50_within_24h": 0.352,
+        "median_abs_error_h": 35.4,
+        "median_bias_h": -4.4,
+        "median_range_width_h": 118.7
+      },
+      "large": {
+        "cases": 471,
+        "coverage": 0.824,
+        "broken_promises": 0.042,
+        "too_pessimistic": 0.134,
+        "p50_within_12h": 0.2,
+        "p50_within_24h": 0.365,
+        "median_abs_error_h": 34.9,
+        "median_bias_h": -4.6,
+        "median_range_width_h": 118.7
+      },
+      "small": {
+        "cases": 17,
+        "coverage": 0.412,
+        "broken_promises": 0.353,
+        "too_pessimistic": 0.235,
+        "p50_within_12h": 0.0,
+        "p50_within_24h": 0.0,
+        "median_abs_error_h": 56.5,
+        "median_bias_h": 39.4,
+        "median_range_width_h": 116.2
       }
     },
     "loso_calibration": {
       "all": {
         "cases": 488,
-        "coverage": 0.781,
-        "broken_promises": 0.055,
-        "too_pessimistic": 0.164,
-        "p50_within_12h": 0.033,
-        "p50_within_24h": 0.064,
-        "median_abs_error_h": 118.2,
-        "median_bias_h": 118.2,
-        "median_range_width_h": 245.1
+        "coverage": 0.955,
+        "broken_promises": 0.023,
+        "too_pessimistic": 0.023,
+        "p50_within_12h": 0.15,
+        "p50_within_24h": 0.266,
+        "median_abs_error_h": 42.6,
+        "median_bias_h": 37.5,
+        "median_range_width_h": 189.2
       },
       "large": {
         "cases": 471,
-        "coverage": 0.788,
-        "broken_promises": 0.045,
-        "too_pessimistic": 0.168,
-        "p50_within_12h": 0.019,
-        "p50_within_24h": 0.042,
-        "median_abs_error_h": 123.5,
-        "median_bias_h": 123.5,
-        "median_range_width_h": 246.9
+        "coverage": 0.983,
+        "broken_promises": 0.011,
+        "too_pessimistic": 0.006,
+        "p50_within_12h": 0.155,
+        "p50_within_24h": 0.276,
+        "median_abs_error_h": 41.9,
+        "median_bias_h": 37.4,
+        "median_range_width_h": 189.7
       },
       "small": {
         "cases": 17,
-        "coverage": 0.588,
+        "coverage": 0.176,
         "broken_promises": 0.353,
-        "too_pessimistic": 0.059,
-        "p50_within_12h": 0.412,
-        "p50_within_24h": 0.647,
-        "median_abs_error_h": 12.2,
-        "median_bias_h": 1.1,
-        "median_range_width_h": 59.6
-      }
-    },
-    "loso_calibration_by_storm_size": {
-      "all": {
-        "cases": 488,
-        "coverage": 0.078,
-        "broken_promises": 0.055,
-        "too_pessimistic": 0.867,
-        "p50_within_12h": 0.029,
-        "p50_within_24h": 0.053,
-        "median_abs_error_h": 153.8,
-        "median_bias_h": 153.8,
-        "median_range_width_h": 106.5
-      },
-      "large": {
-        "cases": 471,
-        "coverage": 0.064,
-        "broken_promises": 0.045,
-        "too_pessimistic": 0.892,
-        "p50_within_12h": 0.023,
-        "p50_within_24h": 0.042,
-        "median_abs_error_h": 158.3,
-        "median_bias_h": 158.3,
-        "median_range_width_h": 106.1
-      },
-      "small": {
-        "cases": 17,
-        "coverage": 0.471,
-        "broken_promises": 0.353,
-        "too_pessimistic": 0.176,
-        "p50_within_12h": 0.176,
-        "p50_within_24h": 0.353,
-        "median_abs_error_h": 41.5,
-        "median_bias_h": 11.7,
-        "median_range_width_h": 110.5
+        "too_pessimistic": 0.471,
+        "p50_within_12h": 0.0,
+        "p50_within_24h": 0.0,
+        "median_abs_error_h": 60.5,
+        "median_bias_h": 43.1,
+        "median_range_width_h": 86.3
       }
     },
     "baseline_no_model": {
@@ -468,9 +468,9 @@
         "too_pessimistic": 1.0,
         "p50_within_12h": 0.0,
         "p50_within_24h": 0.0,
-        "median_abs_error_h": 28.5,
-        "median_bias_h": 28.5,
-        "median_range_width_h": 72.3
+        "median_abs_error_h": 47.8,
+        "median_bias_h": 47.8,
+        "median_range_width_h": 114.7
       },
       {
         "event_id": "E02",
@@ -482,23 +482,23 @@
         "too_pessimistic": 0.0,
         "p50_within_12h": 0.0,
         "p50_within_24h": 0.0,
-        "median_abs_error_h": 89.4,
-        "median_bias_h": -89.4,
-        "median_range_width_h": 72.3
+        "median_abs_error_h": 81.6,
+        "median_bias_h": -81.6,
+        "median_range_width_h": 101.5
       },
       {
         "event_id": "E03",
         "storm": "Apr 2024 storm",
         "size": "large",
         "cases": 9,
-        "coverage": 0.667,
-        "broken_promises": 0.222,
+        "coverage": 0.889,
+        "broken_promises": 0.0,
         "too_pessimistic": 0.111,
         "p50_within_12h": 0.0,
-        "p50_within_24h": 0.111,
-        "median_abs_error_h": 37.1,
-        "median_bias_h": -29.9,
-        "median_range_width_h": 79.2
+        "p50_within_24h": 0.0,
+        "median_abs_error_h": 36.4,
+        "median_bias_h": -36.4,
+        "median_range_width_h": 119.4
       },
       {
         "event_id": "E04",
@@ -509,52 +509,52 @@
         "broken_promises": 0.0,
         "too_pessimistic": 0.25,
         "p50_within_12h": 0.0,
-        "p50_within_24h": 0.75,
-        "median_abs_error_h": 23.6,
-        "median_bias_h": 23.6,
-        "median_range_width_h": 82.1
+        "p50_within_24h": 0.0,
+        "median_abs_error_h": 40.8,
+        "median_bias_h": 40.8,
+        "median_range_width_h": 117.3
       },
       {
         "event_id": "E06",
         "storm": "Sep 2024 storm",
         "size": "large",
         "cases": 14,
-        "coverage": 0.429,
-        "broken_promises": 0.571,
+        "coverage": 1.0,
+        "broken_promises": 0.0,
         "too_pessimistic": 0.0,
         "p50_within_12h": 0.0,
-        "p50_within_24h": 0.071,
-        "median_abs_error_h": 72.0,
-        "median_bias_h": -72.0,
-        "median_range_width_h": 92.0
+        "p50_within_24h": 0.143,
+        "median_abs_error_h": 46.0,
+        "median_bias_h": -42.9,
+        "median_range_width_h": 120.0
       },
       {
         "event_id": "E08",
         "storm": "Jan 2025 storm",
         "size": "small",
         "cases": 5,
-        "coverage": 0.4,
+        "coverage": 0.6,
         "broken_promises": 0.0,
-        "too_pessimistic": 0.6,
-        "p50_within_12h": 0.2,
-        "p50_within_24h": 0.4,
-        "median_abs_error_h": 25.7,
-        "median_bias_h": 25.7,
-        "median_range_width_h": 94.6
+        "too_pessimistic": 0.4,
+        "p50_within_12h": 0.0,
+        "p50_within_24h": 0.0,
+        "median_abs_error_h": 53.4,
+        "median_bias_h": 53.4,
+        "median_range_width_h": 120.4
       },
       {
         "event_id": "E09",
         "storm": "Feb 2025 storm",
         "size": "large",
         "cases": 448,
-        "coverage": 0.547,
-        "broken_promises": 0.022,
-        "too_pessimistic": 0.431,
-        "p50_within_12h": 0.092,
-        "p50_within_24h": 0.208,
-        "median_abs_error_h": 48.6,
-        "median_bias_h": 47.6,
-        "median_range_width_h": 119.2
+        "coverage": 0.817,
+        "broken_promises": 0.045,
+        "too_pessimistic": 0.138,
+        "p50_within_12h": 0.21,
+        "p50_within_24h": 0.379,
+        "median_abs_error_h": 34.4,
+        "median_bias_h": -1.5,
+        "median_range_width_h": 118.7
       },
       {
         "event_id": "E11",
@@ -565,10 +565,10 @@
         "broken_promises": 0.0,
         "too_pessimistic": 0.0,
         "p50_within_12h": 0.0,
-        "p50_within_24h": 1.0,
-        "median_abs_error_h": 23.5,
-        "median_bias_h": 23.5,
-        "median_range_width_h": 68.5
+        "p50_within_24h": 0.0,
+        "median_abs_error_h": 54.3,
+        "median_bias_h": 54.3,
+        "median_range_width_h": 121.1
       }
     ],
     "storm_sizes": {
@@ -583,7 +583,8 @@
       "E09": "large",
       "E10": "small",
       "E11": "small"
-    }
+    },
+    "app_uses_calibration": false
   },
   "tools": {
     "customers_sampled": 11,
@@ -593,10 +594,10 @@
     "status_texts": 26,
     "one_sms_share": 0.423,
     "median_reading_grade": 2.7,
-    "max_reading_grade": 20.8,
+    "max_reading_grade": 21.7,
     "tool_latency_s": {
-      "median": 0.27,
-      "p90": 0.42
+      "median": 0.41,
+      "p90": 0.88
     }
   },
   "replay": {
@@ -605,12 +606,12 @@
     "back_at_h": 66.0,
     "outage_hours": 36.0,
     "texts_sent": 6,
-    "segments_total": 5,
+    "segments_total": 6,
     "first_range_h": [
-      70.7,
-      291.9
+      42.3,
+      164.5
     ],
-    "first_range_contains_actual": false,
+    "first_range_contains_actual": true,
     "kinds": [
       "outage_confirmed",
       "escalation",
@@ -619,7 +620,7 @@
       "estimate_updated",
       "restored"
     ],
-    "seconds_to_replay": 15.0
+    "seconds_to_replay": 19.3
   },
-  "seconds": 166.2
+  "seconds": 213.3
 }

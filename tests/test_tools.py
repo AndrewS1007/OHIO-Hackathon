@@ -274,21 +274,3 @@ def test_ollama_prefetches_status_so_one_call_answers(monkeypatch):
     assert len(calls) == 1
     assert r["source"] == "ai" and [s["tool"] for s in r["steps"]] == ["get_outage_status"]
 
-
-# ---------- learned delays ----------
-
-def test_delays_never_learn_from_the_storm_they_predict():
-    from concierge import delays
-    for ev in DS.storms.event_id:
-        assert ev not in delays.for_event(DS, ev).storms
-
-
-def test_delay_survival_and_nowcast():
-    from concierge import delays
-    d = delays.Delays(np.array([0.0, 10, 20, 30]), np.array([1.0, 2, 3]), "large", ("E01",))
-    assert d.survival(-1) == 1 and d.survival(15) == 0.5 and d.survival(31) == 0
-    assert delays.remaining_damage(4, 0, d, 0) == 4         # nothing reported yet: the pre-storm estimate
-    assert delays.remaining_damage(4, 10, d, 15) == 10      # half reported already -> about as much to come
-    assert delays.remaining_damage(4, 10, d, 31) == 0.2     # reporting is over
-    w = d.sample_waits_over(np.random.default_rng(0), np.array([0.5, 2.5, 9.0]))
-    assert w[0] >= 1 and w[1] == 3 and w[2] > 9            # a job already waiting longer waits longer still

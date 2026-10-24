@@ -76,8 +76,7 @@ def restoration_for(customer: dict, world: World = WORLD, ds: Dataset | None = N
     pid = customer["premise_id"]
     calib = backtest.live_calibration(ds)
     if world.phase == "pre_storm":
-        # The demo forecast replays a past storm, so that storm must not inform its own forecast.
-        sc = prestorm_scenario(pid, ds.current_storm, ds, exclude=(ds.current_storm["replay_of_event"],))
+        sc = prestorm_scenario(pid, ds.current_storm, ds)
         if world.what_if.get("crews"):
             sc.crews = int(world.what_if["crews"])
         sc.access = float(world.what_if.get("access", 1.0))
