@@ -13,7 +13,8 @@ from .data import Dataset, get_dataset
 from .restoration import damage_label
 from .risk import predict
 
-TREE_LABELS = {"SUB": "Substation", "BRK": "Main line", "REC": "Recloser", "FUSE": "Fuse (your street)", "XFMR": "Transformer"}
+TREE_LABELS = {"SUB": "Substation", "BRK": "Main line", "REC": "Recloser", "SECT": "Sectionalizer", "STEP": "Step transformer",
+               "FUSE": "Fuse (your street)", "XFMR": "Transformer"}
 
 
 def _replay_event(ds: Dataset) -> str:

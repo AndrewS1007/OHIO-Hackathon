@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from functools import lru_cache
+from functools import cached_property, lru_cache
 from pathlib import Path
 
 import networkx as nx
@@ -15,8 +15,10 @@ import pandas as pd
 
 from .config import DATA_DIR
 
-DEPTH = {"SUB": 0, "BRK": 1, "REC": 2, "FUSE": 3, "XFMR": 4}
-DEVICE_WORDS = {"BRK": "main line", "REC": "recloser", "FUSE": "fuse", "XFMR": "transformer"}
+# SECT (sectionalizer) and STEP (step transformer) only appear in the real topology.
+DEPTH = {"SUB": 0, "BRK": 1, "REC": 2, "SECT": 2, "STEP": 2, "FUSE": 3, "XFMR": 4}
+DEVICE_WORDS = {"BRK": "main line", "REC": "recloser", "SECT": "sectionalizer", "STEP": "step transformer",
+                "FUSE": "fuse", "XFMR": "transformer"}
 
 
 @dataclass(eq=False)  # hash by identity so engines can cache per dataset
@@ -37,9 +39,12 @@ class Dataset:
     def path(self, premise_id: str) -> list[str] | None:
         return self.paths.get(premise_id)
 
+    @cached_property
+    def _circuit_by_premise(self) -> dict[str, str]:
+        return dict(zip(self.premises.premise_id, self.premises.circuit_id))
+
     def circuit_of(self, premise_id: str) -> str | None:
-        row = self.premises.loc[self.premises.premise_id == premise_id]
-        return None if row.empty else row.circuit_id.iloc[0]
+        return self._circuit_by_premise.get(premise_id)
 
     def device_type(self, device_id: str) -> str:
         return self.graph.nodes[device_id].get("device_type", "SUB")

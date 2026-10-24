@@ -1,7 +1,7 @@
 """Restoration engine: "How long could restoration take?"
 
 Monte Carlo over crew schedules. Each run:
-  1. job hours = labor hours x quantity x travel x nonproductive x access x noise
+  1. job hours = (labor hours x quantity + access adders) x indirect multipliers x access x noise
   2. jobs can't start until assessed (1-3 h after they're reported)
   3. not-yet-found damage is added at random (fewer as the storm ages)
   4. crews take jobs critical-facility first, then upstream first (step restoration)
@@ -13,6 +13,7 @@ from __future__ import annotations
 import heapq
 from collections import Counter
 from dataclasses import dataclass, field
+from functools import lru_cache
 
 import numpy as np
 
@@ -27,8 +28,15 @@ DAMAGE_WORDS = {
     "tree_removal": ("tree on the line", "trees on the line"),
     "transformer_replace": ("damaged transformer", "damaged transformers"),
     "fuse_replace": ("blown fuse", "blown fuses"),
+    "secondary_repair": ("damaged service wire", "damaged service wires"),
+    "recloser_replace": ("damaged recloser", "damaged reclosers"),
+    "switch_repair": ("damaged switch", "damaged switches"),
+    "equipment_repair": ("piece of damaged equipment", "pieces of damaged equipment"),
+    "light_repair": ("broken streetlight", "broken streetlights"),
 }
-WHERE_WORDS = {"BRK": "on the main line", "REC": "upstream of you", "FUSE": "on your street's branch", "XFMR": "at your transformer"}
+WHERE_WORDS = {"BRK": "on the main line", "REC": "upstream of you", "SECT": "upstream of you", "STEP": "upstream of you",
+               "FUSE": "on your street's branch", "XFMR": "at your transformer"}
+HIDDEN_DAMAGE = ["pole_replace", "conductor_repair", "tree_removal", "crossarm_replace"]
 
 
 @dataclass
@@ -40,6 +48,7 @@ class Job:
     done: bool = False
     source: str = "reported"  # reported | what_if | hidden
     incident_id: str | None = None
+    extra_hours: float = 0.0  # access / special-equipment adders (person-hours)
 
 
 @dataclass
@@ -62,61 +71,72 @@ def default_crews(wind_mph: float) -> int:
 
 
 def _job_hours(ds: Dataset, j: Job) -> float:
-    return ds.labor_hours[j.damage_type] * j.quantity * ds.indirect["travel"] * ds.indirect["nonproductive"]
+    """Mock data: travel x nonproductive. Real data: indirect labor multiplier x 1/crew size."""
+    return (ds.labor_hours[j.damage_type] * j.quantity + j.extra_hours) * float(np.prod(list(ds.indirect.values())))
 
 
-def _schedule(jobs, crews: int, start_h: float) -> list[float]:
-    """jobs: list of (priority_key, avail_h, duration). Returns finish time per job."""
-    order = sorted(range(len(jobs)), key=lambda i: jobs[i][0])
+def _schedule(order, avail, dur, crews: int, start_h: float) -> np.ndarray:
+    """Crews take jobs in `order`; each starts when a crew is free and the job is assessed."""
     free = [start_h] * crews
     heapq.heapify(free)
-    finish = [0.0] * len(jobs)
+    finish = np.empty(len(avail))
     for i in order:
-        _, avail, dur = jobs[i]
-        t = heapq.heappop(free)
-        end = max(t, avail) + dur
+        end = max(heapq.heappop(free), avail[i]) + dur[i]
         finish[i] = end
         heapq.heappush(free, end)
     return finish
 
 
-def _hidden_job(ds: Dataset, rng, circuit_devices, now_h) -> Job:
-    dev = circuit_devices[rng.integers(len(circuit_devices))]
-    dtype = rng.choice(["pole_replace", "conductor_repair", "tree_removal", "crossarm_replace"])
-    return Job(dev, str(dtype), 1, now_h + float(rng.uniform(0.5, 6)), source="hidden")
+@lru_cache(maxsize=256)
+def _circuit_arrays(ds: Dataset, cid: str):
+    """Devices a not-yet-found job can land on: depth and critical-facility flag per device."""
+    devs = ds.devices.loc[ds.devices.circuit_id == cid, "device_id"].tolist()
+    prio = ds.priority_devices()
+    return devs, np.array([DEPTH[ds.device_type(d)] for d in devs]), np.array([d in prio for d in devs])
 
 
 def simulate(premise_id: str, sc: Scenario, n_sims: int = 1000, seed: int = 0, ds: Dataset | None = None) -> dict:
     ds = ds or get_dataset()
     rng = np.random.default_rng(seed)
-    path = ds.path(premise_id)
-    path_set = set(path)
-    cid = ds.circuit_of(premise_id)
-    circuit_devices = ds.devices.loc[ds.devices.circuit_id == cid, "device_id"].tolist()
+    path_set = set(ds.path(premise_id))
     prio = ds.priority_devices()
+    c_devs, c_depth, c_prio = _circuit_arrays(ds, ds.circuit_of(premise_id))
+    c_on_path = np.array([d in path_set for d in c_devs])
+    hidden_types = [d for d in HIDDEN_DAMAGE if d in ds.labor_hours]
+    hidden_hours = np.array([_job_hours(ds, Job("", d)) for d in hidden_types])
+    # Reported jobs, as arrays (the same every run)
+    jobs = sc.jobs
+    r_depth = np.array([DEPTH[ds.device_type(j.device_id)] for j in jobs], dtype=int)
+    r_prio = np.array([j.device_id in prio for j in jobs], dtype=bool)
+    r_hours = np.array([_job_hours(ds, j) for j in jobs])
+    r_report = np.array([j.report_h for j in jobs])
+    r_done = np.array([j.done for j in jobs], dtype=bool)
+    r_on_path = np.array([j.device_id in path_set for j in jobs], dtype=bool)
     restore, stage1, any_on_path = [], [], 0
     for _ in range(n_sims):
         # Schedule the whole storm from its start (done jobs included, since they used
         # crew time), so an estimate counts down on its own as hours pass.
-        jobs = list(sc.jobs)
-        for _ in range(rng.poisson(sc.hidden_lambda)):
-            jobs.append(_hidden_job(ds, rng, circuit_devices, sc.now_h))
-        rows = []
-        for j in jobs:
-            depth = DEPTH[ds.device_type(j.device_id)]
-            avail = j.report_h + rng.uniform(1, 3)
-            dur = _job_hours(ds, j) * sc.access * rng.lognormal(0, NOISE_SIGMA)
-            rows.append(((j.device_id not in prio, depth, avail), avail, dur))
-        finish = _schedule(rows, max(1, sc.crews), 0.0)
+        k = rng.poisson(sc.hidden_lambda)
+        dev_i = rng.integers(len(c_devs), size=k)
+        depth = np.concatenate([r_depth, c_depth[dev_i]])
+        is_prio = np.concatenate([r_prio, c_prio[dev_i]])
+        hours = np.concatenate([r_hours, hidden_hours[rng.integers(len(hidden_types), size=k)]])
+        report = np.concatenate([r_report, sc.now_h + rng.uniform(0.5, 6, size=k)])
+        done = np.concatenate([r_done, np.zeros(k, dtype=bool)])
+        on_path = np.concatenate([r_on_path, c_on_path[dev_i]])
+        avail = report + rng.uniform(1, 3, size=len(report))
+        dur = hours * sc.access * rng.lognormal(0, NOISE_SIGMA, size=len(report))
+        order = np.lexsort((avail, depth, ~is_prio))  # critical facility first, then upstream first
+        finish = _schedule(order, avail, dur, max(1, sc.crews), 0.0)
         # An open job the schedule says "should be done" isn't: it's running late.
-        finish = [f if j.done or f > sc.now_h else sc.now_h + rng.exponential(1.0) for j, f in zip(jobs, finish)]
-        on_path = [f for j, f in zip(jobs, finish) if j.device_id in path_set and not j.done]
-        if on_path:
+        late = ~done & (finish <= sc.now_h)
+        finish[late] = sc.now_h + rng.exponential(1.0, size=int(late.sum()))
+        mine = on_path & ~done
+        if mine.any():
             any_on_path += 1
-            restore.append(max(on_path))
-            upstream = [f for j, f in zip(jobs, finish) if j.device_id in path_set and not j.done
-                        and DEPTH[ds.device_type(j.device_id)] <= 2]
-            stage1.append(max(upstream) if upstream else sc.now_h)
+            restore.append(finish[mine].max())
+            upstream = mine & (depth <= 2)
+            stage1.append(finish[upstream].max() if upstream.any() else sc.now_h)
     if not restore:
         return {"status": "no_damage_on_path", "p_affected": 0.0}
     r = np.array(restore) - sc.now_h
@@ -180,8 +200,7 @@ def estimate(premise_id: str, sc: Scenario, n_sims: int = 1000, seed: int = 0, d
     res["assumptions"] = {
         "crews": sc.crews,
         "road_access": "normal" if sc.access <= 1.0 else "slowed",
-        "travel_multiplier": ds.indirect["travel"],
-        "nonproductive_multiplier": ds.indirect["nonproductive"],
+        "labor_multipliers": dict(ds.indirect),
         "expected_unfound_damage": round(sc.hidden_lambda, 1),
     }
     p = res.get("hours_from_now")
@@ -217,7 +236,7 @@ def explain_change(prev: Scenario, new: Scenario, premise_id: str, ds: Dataset |
 
 def jobs_from_records(records) -> list[Job]:
     return [Job(r.device_id, r.damage_type, int(r.quantity), float(r.report_h), bool(getattr(r, "done", False)),
-                incident_id=r.incident_id) for r in records.itertuples()]
+                incident_id=r.incident_id, extra_hours=float(getattr(r, "extra_hours", 0.0))) for r in records.itertuples()]
 
 
 def prestorm_scenario(premise_id: str, storm: dict, ds: Dataset | None = None) -> Scenario:
@@ -228,4 +247,7 @@ def prestorm_scenario(premise_id: str, storm: dict, ds: Dataset | None = None) -
     past = ds.storms.loc[(ds.storms.max_wind_mph - storm["max_wind_mph"]).abs() <= 12, "event_id"]
     dmg = ds.damage.loc[(ds.damage.circuit_id == cid) & ds.damage.event_id.isin(past)]
     per_storm = len(dmg) / max(1, len(past))
-    return Scenario(crews=default_crews(storm["max_wind_mph"]), hidden_lambda=max(1.0, per_storm))
+    # Crews: what this circuit had in those storms, if recorded; otherwise the wind-based assumption.
+    crews = dmg.crew_count.dropna()
+    crews = int(round(crews.median())) if len(crews) else default_crews(storm["max_wind_mph"])
+    return Scenario(crews=crews, hidden_lambda=max(1.0, per_storm))

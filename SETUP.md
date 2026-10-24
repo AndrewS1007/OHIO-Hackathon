@@ -9,6 +9,7 @@ An outage assistant that works over plain SMS, voice and a web chat. A determini
 ```bash
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 .venv/bin/python -m concierge.mockdata      # (re)build the fake dataset in data/mock/
+.venv/bin/python -m concierge.realdata      # build data/real/ from the AEP package (see below); used by default once built
 .venv/bin/python scripts/demo.py            # play the 3-minute demo story
 .venv/bin/python scripts/sms_sim.py         # text the bot from your terminal (you are Maria)
 .venv/bin/python -m pytest                  # 30 tests
@@ -67,6 +68,29 @@ Demo personas (from `data/mock/customers.json`): Maria (CPAP, 8 h battery, Circu
 ## Twilio
 
 Point the number's Messaging webhook to `POST /sms/twilio` and Voice to `POST /voice/twilio` (use ngrok for local). Set `TWILIO_AUTH_TOKEN` (and `PUBLIC_BASE_URL` behind a proxy) to turn on signature checks. Not done yet: outbound sends for proactive alerts and the check-in call; `service.proactive()` already decides *what* to send.
+
+## Real data
+
+Put the challenge package at `aep_challenge_hack26-main/` (it isn't committed), extract the archives as its `data/README.md` says, then convert:
+
+```bash
+cd aep_challenge_hack26-main && mkdir -p data/extracted/Data1 data/extracted/Data2 data/extracted/matched_upstream
+unzip -n data/raw/Data1.zip -d data/extracted/Data1 && unzip -n data/raw/Data2.zip -d data/extracted/Data2
+unzip -n data/raw/matched_upstream.zip -d data/extracted/matched_upstream && cd ..
+.venv/bin/python -m concierge.realdata      # ~45 s; writes data/real/ + conversion_report.json
+```
+
+Once `data/real/` exists, the app uses it. Set `CONCIERGE_DATA_DIR=data/mock` to go back to the fake data (the unit tests always use it). Every assumption the converter makes is listed in `data/real/conversion_report.json` and in [PLAN.md](PLAN.md#real-data-what-we-found-oct-24).
+
+## Local chatbot model (Ollama)
+
+```bash
+ollama pull llama3.1
+ollama create outage-concierge -f Modelfile
+ollama run outage-concierge "can you check my neighbor's power?"
+```
+
+The `Modelfile` holds the chatbot's rules (same as `SYSTEM` in `concierge/agent.py`), a low temperature, and a few no-number examples of refusals and safety answers.
 
 ## Known limits (fake data)
 

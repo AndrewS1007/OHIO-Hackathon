@@ -36,12 +36,14 @@ def scenario_at(ds: Dataset, premise_id: str, event_id: str, t: float, what_if: 
     storm = ds.storms.loc[ds.storms.event_id == event_id].iloc[0]
     known = recs.loc[recs.report_h <= t]
     jobs = [Job(r.device_id, r.damage_type, int(r.quantity), float(r.report_h), bool(r.done_h <= t),
-                incident_id=r.incident_id) for r in known.itertuples()]
+                incident_id=r.incident_id, extra_hours=float(getattr(r, "extra_hours", 0.0))) for r in known.itertuples()]
     found_at = float(what_if.get("extra_poles_at", 3.0))  # what-if poles are "found" at this storm hour
     if what_if.get("extra_poles") and t >= found_at:
-        fuse = next(d for d in ds.path(premise_id) if ds.device_type(d) == "FUSE")
+        # On the lowest protective device above the premise (a fuse on most real paths).
+        fuse = next(d for d in reversed(ds.path(premise_id)) if ds.device_type(d) in ("FUSE", "SECT", "REC", "BRK"))
         jobs.append(Job(fuse, "pole_replace", int(what_if["extra_poles"]), found_at, source="what_if", incident_id="what_if_poles"))
-    crews = int(known.crew_count.iloc[0]) if len(known) else default_crews(storm.max_wind_mph)
+    # The real ARCOS extract has no crew counts, so fall back to the challenge assumption.
+    crews = int(known.crew_count.iloc[0]) if len(known) and pd.notna(known.crew_count.iloc[0]) else default_crews(storm.max_wind_mph)
     crews = int(what_if.get("crews", crews))
     if base_lambda is None:
         base_lambda = prestorm_scenario(premise_id, {"max_wind_mph": storm.max_wind_mph}, ds).hidden_lambda

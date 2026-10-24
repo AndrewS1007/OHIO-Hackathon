@@ -35,12 +35,20 @@ def cases(n_sims: int = 300, ds: Dataset | None = None) -> pd.DataFrame:
     rows = []
     for ev in ds.storms.sort_values("start_time").event_id:
         wind = float(ds.storms.loc[ds.storms.event_id == ev, "max_wind_mph"].iloc[0])
+        by_circuit, seen = {}, set()
         for premise in reps.values():
             cid = ds.circuit_of(premise)
-            recs = event_records(ds, ev, cid)
-            on_path = recs.loc[recs.device_id.isin(ds.path(premise))]
-            if on_path.empty:
+            if cid not in by_circuit:
+                by_circuit[cid] = event_records(ds, ev, cid)
+            recs = by_circuit[cid]
+            if recs.empty:
                 continue
+            on_path = recs.loc[recs.device_id.isin(ds.path(premise))]
+            # Paths that share the same damage get the same answer: score each once.
+            key = frozenset(on_path.incident_id)
+            if on_path.empty or key in seen:
+                continue
+            seen.add(key)
             t = float(on_path.report_h.min()) + 1.0
             actual = actual_restore_h(ds, premise, recs)
             if actual <= t:

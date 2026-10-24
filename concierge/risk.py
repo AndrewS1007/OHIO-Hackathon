@@ -27,10 +27,11 @@ def band_for(p: float) -> str:
 
 
 def _zone_path(ds: Dataset, premise_id: str) -> list[str]:
-    """Upline devices that can take this premise out (main line, recloser, fuse)."""
-    return [d for d in ds.path(premise_id) if ds.device_type(d) in ("BRK", "REC", "FUSE")]
+    """Upline devices that can take this premise out (main line, recloser, sectionalizer, fuse)."""
+    return [d for d in ds.path(premise_id) if ds.device_type(d) in ("BRK", "REC", "SECT", "FUSE")]
 
 
+@lru_cache(maxsize=4096)
 def _history_events(ds: Dataset, circuit_id: str) -> list[str]:
     """Storms we have records for on this circuit (from its first appearance on)."""
     seen = ds.damage.loc[ds.damage.circuit_id == circuit_id, "event_id"]
@@ -40,8 +41,14 @@ def _history_events(ds: Dataset, circuit_id: str) -> list[str]:
     return ds.storms.loc[ds.storms.start_time >= first, "event_id"].tolist()
 
 
+@lru_cache(maxsize=4)
+def _events_by_device(ds: Dataset) -> dict[str, set[str]]:
+    return ds.damage.groupby("device_id").event_id.agg(set).to_dict()
+
+
 def _path_damaged(ds: Dataset, zone_path: list[str]) -> set[str]:
-    return set(ds.damage.loc[ds.damage.device_id.isin(zone_path), "event_id"])
+    by_dev = _events_by_device(ds)
+    return set().union(*(by_dev.get(d, set()) for d in zone_path))
 
 
 @dataclass

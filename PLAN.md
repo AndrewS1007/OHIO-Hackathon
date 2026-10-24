@@ -98,15 +98,18 @@ Example message (grade-6 reading level):
 
 ## How we use each data source
 
-| Data | Use |
-|---|---|
-| ARCOS damage assessment | Risk features, historical restoration durations, similar-storm retrieval, **storm replay, backtesting** |
-| Circuit GIS | Map view, proximity features, circuit context |
-| Upline flow / topology | Dependency graph: "what has to be fixed before you", step restoration |
-| STORMS labor hours | Base repair effort per damage type (Monte Carlo inputs) |
-| Indirect labor assumptions | Travel and nonproductive-time multipliers |
-| Priority locations | Sequencing ("a critical facility on your circuit is prioritized"), never exact locations |
-| Structure diagrams | Plain-language repair explanations ("a pole takes longer than a wire, here's why") |
+`python -m concierge.realdata` turns the challenge package into these tables (`data/real/`). The engines read them by default; the mock dataset is still used by the unit tests.
+
+| Data (real file) | Becomes | Use |
+|---|---|---|
+| ARCOS damage (`arcos_prod_damage_09_28_Clip`, 1,659 records) | `arcos_damage.csv`, `storms.csv` | Risk labels, restoration durations, similar storms, **storm replay, backtesting** |
+| Customers (`Customer_Clip`, 117,642) | `premises.csv` | Premise → circuit + one of 4 coarse map areas per circuit. Nothing else is read |
+| Topology (`matched_upstream.txt`, 117,599 chains) | `devices.csv`, `topology.txt` | Dependency graph: "what has to be fixed before you", step restoration |
+| Primary lines (`Primary_ExportFeatures`) | `circuits.csv` | Circuit length and overhead share (risk features) |
+| Transformers, fuses, reclosers | (used during conversion) | Coordinates to place each damage report on the network |
+| Labor workbook (`Install_Labor_HackOHIO.xlsx`) | `labor_hours.csv`, `labor_basis.csv`, `indirect_labor.csv` | Person-hours per repair recipe × indirect labor multiplier (4.5) |
+| Hospitals, fire stations, EMS | `priority_locations.csv` | Sequencing ("a critical facility on your circuit is restored first"); only device + circuit kept |
+| Structure diagrams (PDF) | not used yet | Plain-language repair explanations, and checking our repair recipes |
 
 ## Engine details
 
@@ -118,7 +121,7 @@ Example message (grade-6 reading level):
 
 **Restoration engine** (topology + STORMS + indirect labor)
 - Trace the premise upstream through the topology with networkx.
-- Each damage job: hours = labor hours × quantity × travel/NPT multiplier × access factor.
+- Each damage job: hours = (labor hours × quantity + access adders) × indirect multipliers × access factor. With real data: workbook person-hours × 4.5 ILM ÷ a 4-person crew, plus the workbook's access / backyard / remote-site adders when ARCOS flags them.
 - Crews work jobs upstream-first (critical-facility circuits first); you're back when every job on *your* path is done (step restoration).
 - Monte Carlo (~1,000 runs, randomizing job time, assessment delay, and not-yet-found damage) → P10 / P50 / P90 + the biggest driver.
 
@@ -143,10 +146,11 @@ The LLM calls the engines as tools: `get_risk`, `estimate_restoration`, `get_ale
 
 ## Tech stack
 
-- Backend: Python, FastAPI, networkx, numpy/pandas, scikit-learn (geopandas once real shapefiles arrive)
+- Backend: Python, FastAPI, networkx, numpy/pandas, scikit-learn; geopandas/pyogrio + openpyxl for the data conversion
 - Messaging: Twilio (SMS + voice)
 - Web view: React with MapLibre or Leaflet, or Streamlit if the team is mostly Python
-- AI: Claude API (`claude-opus-5-5`), narration only, with a template fallback when no key is set
+- AI narration: local Ollama `llama3.1` (`narrate.py`), with a template fallback when it's off or fails a check
+- AI chatbot: Claude tool use today (`agent.py`); `Modelfile` defines an `outage-concierge` Ollama model with the same rules for running it locally
 
 ## Responsible AI
 
@@ -176,13 +180,49 @@ The LLM calls the engines as tools: `get_risk`, `estimate_restoration`, `get_ale
 - [ ] Check-in call for a declared-medical persona (Twilio voice)
 - [ ] Offline storm plan (cacheable page + printable PDF)
 - [ ] Web view: family tree, uncertainty cone, 2–3 what-if sliders, replay timeline
-- [ ] Swap fake data for the real extracts
+- [x] **NEW** Swap fake data for the real extracts (`concierge/realdata.py` → `data/real/`)
+- [x] **NEW** Simulation ~30× faster (vectorized Monte Carlo) so estimates take ~1 s on real circuits
+- [x] **NEW** Ollama `Modelfile` for the chatbot (`outage-concierge`)
+- [ ] Recalibrate the honesty score on real storms (see findings below)
+- [ ] Rewrite demo beats 4 and the slider around the real Feb 2025 storm
+- [ ] Wire `agent.py` to Ollama, or keep Claude for the chatbot (see latency below)
+- [ ] Add real weather for past storms (NOAA) instead of assumed wind
 
 Stretch: multilingual messages, safe customer damage reporting.
 
+## Real data: what we found (Oct 24)
+
+**What's in the package.** Appalachian Power (APCO), around Roanoke: 110 circuits, 31 substations, 117,595 premises with a full upline path, 41 critical facilities near our lines. ARCOS has 1,659 damage records from Oct 2022 to Aug 2026.
+
+**What's missing, and the assumption we made** (all listed in `data/real/conversion_report.json`):
+
+| Gap | Assumption |
+|---|---|
+| No storm/event IDs (every record says "Default") | Reports more than 3 days apart start a new event. Events with fewer than 10 records are everyday damage, not storms. That gives **11 storms**, dominated by **Feb 2025 (1,254 records)** and **Sep 2024 (194)** |
+| Dates only, no times | Reports at 06:00, repairs at 18:00 on the logged date. So restoration times are only accurate to about half a day |
+| Open records; repairs logged weeks later | Dropped: 56 open, 245 repaired more than 7 days after the report (follow-up work, not storm restoration). **1,290 records used** |
+| No weather | `max_wind_mph` is **assumed** from each storm's damage volume (35–75 mph). The risk model's "winds" factor is really "storm size" until we add NOAA data |
+| No crew counts | Inferred per storm and circuit from throughput: crew-hours of work ÷ hours the repairs took |
+| Damage points aren't linked to devices | Placed at the nearest device on the same circuit (median 38 m). Wire, pole and switch damage goes to the protective device above the nearest transformer, since that's what trips |
+| Workbook has hours per part, not per repair | Repair "recipes" built from parts, e.g. a pole = pole + crossarm + 3 insulators + 3 pins + guy + anchor + ground ≈ 6.3 person-hours ≈ 7 crew-hours. See `labor_basis.csv` |
+
+**Privacy.** The customer layer has names, addresses, road names, coordinates and a life-support flag. The converter reads only the premise number, circuit and service point, and uses coordinates only to place damage and to build four coarse areas per circuit. **The life-support flag is never read**: medical needs stay declared-only. A test checks that none of these fields reach the tables.
+
+**First results on real data.**
+- Maria (synthetic CPAP persona on a real premise, circuit CIR2): High risk (53%, medium confidence). In the Feb 2025 replay her power is out at hour 30 and back at hour 66, with two "here's why" updates in between.
+- Dev lands on a circuit with no damage history, so he gets the fallback, as designed.
+- **The honesty score is bad, and we should say so.** Raw ranges contained the real time 19% of the time (too optimistic). Calibrating on the 2023–24 storms raises coverage to 57%, but the ranges become ~410 h wide. That happens because the calibration storms are small and the test set is the Feb 2025 storm, a different kind of event. Fixes to try, in order: calibrate by storm size (small vs. large); leave-one-storm-out cross-validation instead of a time split; calibrate by hours into the outage.
+- **Speed:** estimate ~1 s, full replay ~16 s, risk model training ~19 s, backtest ~100 s (both cached at startup). The backtest should be cached to disk before the demo.
+- **Local chatbot (`outage-concierge`, first test on this laptop, CPU only, 8 cores, other jobs running):**
+  - It called the status tool for "when is my power back?" and then answered using only the fact card's times and range. Good.
+  - It refused a hospital-location question. Good, but it also printed a raw tool call as text, which our grounding check must catch.
+  - It made up tool arguments (a fake customer ID). That's harmless, because tools are bound to the customer server-side.
+  - For "a power line is sparking in my driveway" it called a tool instead of saying 911. Our safety gate answers this before any AI sees it, which shows why the gate has to stay first.
+  - **28–80 s per reply**, far over Twilio's ~15 s. To use it live: a GPU machine, a smaller model (e.g. `llama3.2:3b`), or keep Claude for the chatbot and use Ollama only as the offline backup.
+
 ## Team split (4 people)
 
-- **Data:** load the real shapefiles and spreadsheets into the same tables as `data/mock/`, build the topology graph
+- **Data:** real extracts are converted (`concierge/realdata.py`); next: NOAA weather per storm, check repair recipes against the structure diagrams
 - **Models:** risk engine, restoration / Monte Carlo, backtest + honesty score, storm replay
 - **Channels:** Twilio SMS/voice flows, offline storm plan, web view (map, family tree, cone, sliders, replay timeline)
 - **AI + rules:** narration prompt, fact card and privacy filter, safety gate + guardrails, alert rules, demo script
