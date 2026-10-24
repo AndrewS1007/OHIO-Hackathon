@@ -101,27 +101,36 @@ def _handle(phone: str, body: str) -> dict:
         return _reply("Thanks for telling us. Your home may have damage of its own. We've opened a ticket and will text you a new estimate.", escalated_to_human=True)
 
     # Free-form questions (more than a few words) go to the AI concierge when it's on.
-    # One-word commands and short questions stay on the fast, predictable keyword path.
-    #if len(body.split()) > 5 and agent.available() and not s.battery_mode:
-        #r = agent.answer(who(phone), body, agent.ChatContext(c, WORLD, channel="sms", who=who(phone)))
-        #return _reply(r["text"], source=r["source"], kind="ai", tools=[x["tool"] for x in r["steps"]])
-
+    # 1. Strict keywords (fast path, no AI needed)
     kind = None
     if cmd in ("WHY", "WHY?"):
         kind = "why"
-    elif cmd in ("WORSE", "SAFETY") or re.search(r"\bgenerator\b", body, re.I):
+    elif cmd in ("WORSE", "SAFETY"):
         kind = "worse"
-    elif cmd in ("PLAN", "PREP") or re.search(r"\b(prepare|prep|ready|what should i do)\b", body, re.I):
+    elif cmd in ("PLAN", "PREP"):
         kind = "plan"
-    elif cmd in ("ALERTS", "ALERT") or re.search(r"\b(alerts?|qualify|sign me up|notif)", body, re.I):
+    elif cmd in ("ALERTS", "ALERT"):
         kind = "alerts"
-    elif cmd in ("WHEN", "STATUS") or re.search(r"\b(when|how long|back on|restor|eta|lose power|risk|will i|outage)\b", body, re.I):
+    elif cmd in ("WHEN", "STATUS"):
         kind = "status"
+
+    # 2. Natural language (send to AI if it isn't a strict keyword)
     if kind is None:
-        if agent.available():
+        if agent.available() and not s.battery_mode:
             r = agent.answer(who(phone), body, agent.ChatContext(c, WORLD, channel="sms", who=who(phone)))
             return _reply(r["text"], source=r["source"], kind="ai", tools=[x["tool"] for x in r["steps"]])
-        return _reply("Sorry, I didn't get that. " + MENU)
+        
+        # 3. Fallback: If AI is unreachable or battery mode is on, guess intent via regex
+        if re.search(r"\bgenerator\b", body, re.I) or re.search(r"\b(worse|safety)\b", body, re.I):
+            kind = "worse"
+        elif re.search(r"\b(prepare|prep|ready|what should i do)\b", body, re.I):
+            kind = "plan"
+        elif re.search(r"\b(alerts?|qualify|sign me up|notif)", body, re.I):
+            kind = "alerts"
+        elif re.search(r"\b(when|how long|back on|restor|eta|lose power|risk|will i|outage)\b", body, re.I):
+            kind = "status"
+        else:
+            return _reply("Sorry, I didn't get that. " + MENU)
 
     if kind == "status":
         if WORLD.phase == "pre_storm":
@@ -130,6 +139,7 @@ def _handle(phone: str, body: str) -> dict:
             kind = "status"
         else:
             kind = "no_outage"
+            
     out = message(kind, c, s,
                   extra={"confirmed": ["Your power is out. Crews are working on it."]} if kind == "status" else None)
     return _reply(out["text"], source=out["source"], kind=kind)
