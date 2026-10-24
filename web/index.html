@@ -1,0 +1,638 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Outage Concierge</title>
+<style>
+:root {
+  color-scheme: light;
+  --page: #f9f9f7;
+  --surface: #fcfcfb;
+  --surface-2: #f0efec;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --muted: #898781;
+  --grid: #e1e0d9;
+  --axis: #c3c2b7;
+  --border: rgba(11,11,11,0.10);
+  --series-1: #2a78d6;
+  --band-fill: rgba(42,120,214,0.16);
+  --strip: rgba(42,120,214,0.38);
+  --good: #0ca30c;
+  --good-text: #006300;
+  --warning: #fab219;
+  --serious: #ec835a;
+  --critical: #d03b3b;
+  /* risk bands: one-hue ordinal ramp (blue 250 / 400 / 550 / 700) */
+  --risk-low: #86b6ef;
+  --risk-elevated: #3987e5;
+  --risk-high: #1c5cab;
+  --risk-severe: #0d366b;
+  --risk-none: #e1e0d9;
+  --phone-bg: #f0efec;
+  --bubble: #ffffff;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19; --surface-2: #232321;
+    --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781; --grid: #2c2c2a; --axis: #383835;
+    --border: rgba(255,255,255,0.10);
+    --series-1: #3987e5; --band-fill: rgba(57,135,229,0.22); --strip: rgba(57,135,229,0.45);
+    --good-text: #0ca30c;
+    --risk-low: #184f95; --risk-elevated: #256abf; --risk-high: #3987e5; --risk-severe: #86b6ef; --risk-none: #2c2c2a;
+    --phone-bg: #111110; --bubble: #232321;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d; --surface: #1a1a19; --surface-2: #232321;
+  --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781; --grid: #2c2c2a; --axis: #383835;
+  --border: rgba(255,255,255,0.10);
+  --series-1: #3987e5; --band-fill: rgba(57,135,229,0.22); --strip: rgba(57,135,229,0.45);
+  --good-text: #0ca30c;
+  --risk-low: #184f95; --risk-elevated: #256abf; --risk-high: #3987e5; --risk-severe: #86b6ef; --risk-none: #2c2c2a;
+  --phone-bg: #111110; --bubble: #232321;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--ink); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+header.top { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center; padding: 16px 24px; border-bottom: 1px solid var(--border); background: var(--surface); }
+header.top h1 { font-size: 18px; margin: 0; letter-spacing: -0.01em; }
+header.top .sub { color: var(--ink-2); font-size: 13px; }
+.spacer { flex: 1; }
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; background: var(--surface-2); font-size: 13px; color: var(--ink-2); }
+select, button { font: inherit; color: var(--ink); }
+select { padding: 6px 8px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); }
+.clockbar { position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; padding: 10px 24px; background: var(--surface); border-bottom: 1px solid var(--border); }
+.clockbar input[type=range] { flex: 1; min-width: 180px; accent-color: var(--series-1); }
+.clock { font-variant-numeric: tabular-nums; font-weight: 600; min-width: 190px; }
+.phase { font-size: 12px; color: var(--ink-2); }
+button.play { width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--border); background: var(--surface-2); cursor: pointer; }
+main { display: grid; gap: 16px; padding: 16px 24px 40px; grid-template-columns: minmax(0, 1fr) 360px;
+  grid-template-areas: "card phone" "cone phone" "tree tree" "map honesty"; max-width: 1320px; margin: 0 auto; }
+@media (max-width: 980px) { main { grid-template-columns: minmax(0,1fr); grid-template-areas: "card" "phone" "cone" "tree" "map" "honesty"; padding: 12px 16px 32px; } .clockbar, header.top { padding-left: 16px; padding-right: 16px; } }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 16px 18px; min-width: 0; }
+.card h2 { font-size: 15px; margin: 0 0 2px; }
+.card .lede { color: var(--ink-2); font-size: 13px; margin: 0 0 12px; }
+#c-card { grid-area: card; } #c-phone { grid-area: phone; } #c-cone { grid-area: cone; } #c-tree { grid-area: tree; } #c-map { grid-area: map; } #c-honesty { grid-area: honesty; }
+
+/* three lanes */
+.lanes { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 12px; }
+@media (max-width: 720px) { .lanes { grid-template-columns: 1fr; } }
+.lane { border-radius: 10px; padding: 12px; background: var(--surface-2); min-width: 0; }
+.lane .tag { font-size: 12px; font-weight: 600; color: var(--ink-2); display: flex; gap: 6px; align-items: center; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.04em; }
+.lane .big { font-size: 18px; font-weight: 600; margin: 2px 0 6px; }
+.lane ul { margin: 0; padding-left: 18px; color: var(--ink-2); font-size: 13px; }
+.lane li { margin: 2px 0; }
+.lane .note { color: var(--muted); font-size: 12px; margin-top: 6px; }
+
+/* phone */
+.phone { background: var(--phone-bg); border-radius: 28px; border: 1px solid var(--border); padding: 14px 12px; height: 640px; display: flex; flex-direction: column; }
+.phone .bar { text-align: center; font-size: 12px; color: var(--ink-2); padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+.msgs { flex: 1; overflow-y: auto; padding: 10px 2px; display: flex; flex-direction: column; gap: 10px; }
+.bubble { background: var(--bubble); border: 1px solid var(--border); border-radius: 16px 16px 16px 4px; padding: 9px 11px; font-size: 13.5px; white-space: pre-wrap; max-width: 92%; }
+.bubble.new { outline: 2px solid var(--series-1); }
+.meta { font-size: 11px; color: var(--muted); margin: 2px 4px 0; }
+.empty { color: var(--muted); font-size: 13px; text-align: center; margin: auto 0; }
+
+/* chart chrome */
+svg text { fill: var(--muted); font-size: 11px; font-family: inherit; }
+svg .ink { fill: var(--ink); } svg .ink2 { fill: var(--ink-2); }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--ink-2); margin: 8px 0 0; }
+.legend .sw { display: inline-block; width: 14px; height: 10px; border-radius: 2px; vertical-align: -1px; margin-right: 6px; }
+.cone-wrap { display: grid; grid-template-columns: minmax(0,1fr) 220px; gap: 16px; }
+@media (max-width: 720px) { .cone-wrap { grid-template-columns: 1fr; } }
+.whatif { background: var(--surface-2); border-radius: 10px; padding: 12px; font-size: 13px; }
+.whatif h3 { font-size: 13px; margin: 0 0 8px; }
+.whatif label { display: block; margin: 10px 0 4px; color: var(--ink-2); }
+.whatif input[type=range] { width: 100%; accent-color: var(--series-1); }
+.seg { display: flex; gap: 4px; flex-wrap: wrap; }
+.seg button { padding: 4px 9px; border-radius: 7px; border: 1px solid var(--border); background: var(--surface); cursor: pointer; font-size: 12.5px; }
+.seg button[aria-pressed=true] { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+.whatif .out { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); color: var(--ink-2); }
+.whatif .out b { color: var(--ink); }
+details { margin-top: 10px; font-size: 13px; color: var(--ink-2); }
+summary { cursor: pointer; }
+table { border-collapse: collapse; width: 100%; font-size: 12.5px; margin-top: 6px; }
+th, td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--grid); font-variant-numeric: tabular-nums; }
+
+/* tree */
+.tree { display: flex; align-items: stretch; gap: 0; overflow-x: auto; padding-bottom: 4px; }
+.node { flex: 1 1 0; background: var(--surface-2); border-radius: 10px; padding: 10px; min-width: 104px; }
+.node h4 { margin: 0 0 6px; font-size: 13px; }
+.arrow { flex: 0 0 22px; display: flex; align-items: center; justify-content: center; color: var(--muted); }
+.arrow.dead { color: var(--critical); }
+.status { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--surface); border: 1px solid var(--border); color: var(--ink); }
+.status .dot { width: 8px; height: 8px; border-radius: 50%; }
+.items { list-style: none; padding: 0; margin: 8px 0 0; font-size: 12.5px; color: var(--ink-2); }
+.items li { margin: 3px 0; }
+.items li.fixed { text-decoration: line-through; color: var(--muted); }
+.hist { font-size: 11.5px; color: var(--muted); margin-top: 8px; }
+@media (max-width: 720px) { .tree { flex-direction: column; } .arrow { transform: rotate(90deg); height: 20px; } .node { min-width: 0; } }
+
+/* honesty */
+.tiles { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 10px; margin-bottom: 12px; }
+.tile { background: var(--surface-2); border-radius: 10px; padding: 10px; }
+.tile .k { font-size: 12px; color: var(--ink-2); }
+.tile .v { font-size: 24px; font-weight: 650; margin-top: 2px; }
+.tile .d { font-size: 12px; color: var(--muted); }
+.caveat { font-size: 12px; color: var(--muted); margin-top: 8px; }
+
+#tip { position: fixed; pointer-events: none; z-index: 20; background: var(--ink); color: var(--surface); font-size: 12.5px; padding: 7px 9px; border-radius: 8px; max-width: 280px; opacity: 0; transition: opacity .08s; white-space: pre-line; }
+.sr { position: absolute; left: -9999px; }
+</style>
+</head>
+<body>
+<header class="top">
+  <div>
+    <h1>Built for the Dark</h1>
+    <div class="sub">AI Outage Concierge · what a customer sees, hour by hour</div>
+  </div>
+  <div class="spacer"></div>
+  <label class="chip">Customer
+    <select id="persona" aria-label="Customer"></select>
+  </label>
+  <span class="chip" id="storm-chip">Loading storm…</span>
+</header>
+
+<div class="clockbar" role="group" aria-label="Storm clock">
+  <button class="play" id="play" aria-label="Play storm replay">▶</button>
+  <input type="range" id="t" min="-18" max="24" step="0.5" value="-18" aria-label="Storm hour">
+  <div>
+    <div class="clock" id="clock">—</div>
+    <div class="phase" id="phase">—</div>
+  </div>
+</div>
+
+<main>
+  <section class="card" id="c-card" aria-live="polite">
+    <h2>What the customer knows right now</h2>
+    <p class="lede">Facts, estimates and actions are always kept apart.</p>
+    <div class="lanes">
+      <div class="lane"><div class="tag">✓ Confirmed</div><div id="lane-ok"></div></div>
+      <div class="lane"><div class="tag">≈ Our estimate</div><div id="lane-est"></div></div>
+      <div class="lane"><div class="tag">→ Your action</div><div id="lane-do"></div></div>
+    </div>
+  </section>
+
+  <section class="card" id="c-phone">
+    <h2>Their phone</h2>
+    <p class="lede">The texts they'd get. Plain SMS works with no Wi-Fi and any phone.</p>
+    <div class="phone">
+      <div class="bar">Outage Concierge</div>
+      <div class="msgs" id="msgs"></div>
+    </div>
+  </section>
+
+  <section class="card" id="c-cone">
+    <h2>Restoration estimate over time</h2>
+    <p class="lede">Replaying a real past storm. Across: when we made the estimate. Up: when we said power would be back. Each hour we re-estimate with only what crews had reported by then.</p>
+    <div class="cone-wrap">
+      <div>
+        <div id="cone"></div>
+        <div class="legend" id="cone-legend">
+          <span><span class="sw" style="background:var(--band-fill);outline:1px solid var(--series-1)"></span>Likely window (P10–P90)</span>
+          <span><span class="sw" style="background:var(--series-1);height:2px;vertical-align:3px"></span>Most likely (P50)</span>
+          <span>● Text sent</span>
+          <span>– – Power actually back</span>
+        </div>
+        <details><summary>Show as a table</summary><div id="cone-table"></div></details>
+      </div>
+      <div class="whatif" role="group" aria-label="What-if controls">
+        <h3>What if…</h3>
+        <label>Crews on this circuit</label>
+        <div class="seg" id="crews"></div>
+        <label for="poles">Extra broken poles found at hour 3: <b id="poles-v">0</b></label>
+        <input type="range" id="poles" min="0" max="3" step="1" value="0">
+        <label>Roads</label>
+        <div class="seg" id="access">
+          <button data-v="1" aria-pressed="true">Normal</button>
+          <button data-v="1.5" aria-pressed="false">Flooded / blocked</button>
+        </div>
+        <div class="out" id="whatif-out">Change something to see how the estimate moves.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card" id="c-tree">
+    <h2>Power family tree</h2>
+    <p class="lede">Everything that has to work for power to reach this home. Damage shows up as crews report it.</p>
+    <div class="tree" id="tree"></div>
+  </section>
+
+  <section class="card" id="c-map">
+    <h2>Outage risk by area</h2>
+    <p class="lede">Coming storm risk for each area. During the replay, outlined areas are without power. Click an area to see it.</p>
+    <div id="map"></div>
+    <div class="legend" id="map-legend"></div>
+    <div class="caveat">Schematic layout grouped by circuit, not real geography.</div>
+  </section>
+
+  <section class="card" id="c-honesty">
+    <h2>Honesty scorecard</h2>
+    <p class="lede">How often did the real restoration time land inside our range? Tested on storms the model never saw.</p>
+    <div class="seg" id="calib" style="margin-bottom:10px">
+      <button data-v="0" aria-pressed="false">Before calibration</button>
+      <button data-v="1" aria-pressed="true">After calibration</button>
+    </div>
+    <div class="tiles" id="tiles"></div>
+    <div id="strip"></div>
+    <div class="legend">
+      <span><span class="sw" style="background:var(--strip)"></span>Our range (P10–P90)</span>
+      <span><span style="color:var(--series-1)">●</span> Real time, inside range</span>
+      <span><span style="color:var(--critical)">✕</span> Real time, outside range</span>
+    </div>
+    <details><summary>Alert and escalation rules</summary><ol id="rules"></ol></details>
+    <div class="caveat">Built on made-up data, so these numbers show the method, not real-world accuracy.</div>
+  </section>
+</main>
+<div id="tip" role="tooltip"></div>
+
+<script>
+const START = new Date("2026-10-25T14:00:00");
+const PRE_H = 18;
+const S = { personas: [], persona: null, t: -PRE_H, whatIf: { crews: null, poles: 0, access: 1 },
+            replay: null, tree: [], map: [], pre: null, why: null, backtest: null, calibrated: true, playing: null, lastEventCount: 0 };
+const $ = (id) => document.getElementById(id);
+const api = (p) => fetch(p).then(r => { if (!r.ok) throw new Error(p + " " + r.status); return r.json(); });
+const esc = (s) => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+function clockAt(h, withDay = true) {
+  const d = new Date(START.getTime() + Math.round(h) * 3600e3);
+  const hr = d.getHours() % 12 || 12, ap = d.getHours() < 12 ? "am" : "pm";
+  const day = d.toLocaleDateString("en-US", { weekday: "short" });
+  return withDay && d.toDateString() !== START.toDateString() ? `${day} ${hr}${ap}` : `${hr}${ap}`;
+}
+function fullClock(h) {
+  const d = new Date(START.getTime() + h * 3600e3);
+  return d.toLocaleString("en-US", { weekday: "short", hour: "numeric", minute: "2-digit" });
+}
+
+// ---------- tooltip ----------
+const tip = $("tip");
+function showTip(e, text) { tip.textContent = text; tip.style.opacity = 1; moveTip(e); }
+function moveTip(e) {
+  const x = Math.min(e.clientX + 14, window.innerWidth - tip.offsetWidth - 8);
+  const y = Math.min(e.clientY + 14, window.innerHeight - tip.offsetHeight - 8);
+  tip.style.left = x + "px"; tip.style.top = y + "px";
+}
+function hideTip() { tip.style.opacity = 0; }
+
+// ---------- loading ----------
+async function init() {
+  const [personas, map, bt, rules, info] = await Promise.all([
+    api("/api/customers"), api("/api/map"), api("/api/backtest"), api("/api/rules"), api("/api")]);
+  S.personas = personas; S.map = map; S.backtest = bt;
+  const st = info.storm;
+  $("storm-chip").textContent = `${st.name} · ${st.max_wind_mph} mph winds · arrives Sun 2pm`;
+  $("persona").innerHTML = personas.map((p, i) => {
+    const needs = p.declared_needs.map(n => n.need.replace("_", " ")).join(", ");
+    return `<option value="${i}">${esc(p.name)}${needs ? " (" + esc(needs) + ")" : ""}</option>`;
+  }).join("");
+  $("persona").onchange = () => selectPersona(S.personas[+$("persona").value]);
+  $("rules").innerHTML = rules.map(r => `<li><b>${r.id}</b> ${esc(r.rule)}</li>`).join("");
+  $("crews").innerHTML = [["", "As recorded"], ["1", "1"], ["2", "2"], ["3", "3"], ["4", "4"], ["5", "5"]]
+    .map(([v, l]) => `<button data-v="${v}" aria-pressed="${v === ""}">${l}</button>`).join("");
+  segment("crews", v => { S.whatIf.crews = v ? +v : null; loadReplay(true); });
+  segment("access", v => { S.whatIf.access = +v; loadReplay(true); });
+  segment("calib", v => { S.calibrated = v === "1"; loadStrip(); });
+  $("poles").oninput = () => { $("poles-v").textContent = $("poles").value; S.whatIf.poles = +$("poles").value; debounceReplay(); };
+  $("t").oninput = () => { stopPlay(); S.t = +$("t").value; renderTime(); };
+  $("play").onclick = togglePlay;
+  window.addEventListener("resize", () => { renderCone(); renderMap(); renderStrip(); });
+  await selectPersona(personas[0]);
+  loadStrip();
+}
+
+function segment(id, onPick) {
+  $(id).querySelectorAll("button").forEach(b => b.onclick = () => {
+    $(id).querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x === b));
+    onPick(b.dataset.v);
+  });
+}
+
+async function selectPersona(p) {
+  S.persona = p;
+  const pid = encodeURIComponent(p.premise_id);
+  const [tree, pre, why] = await Promise.all([api(`/api/premises/${pid}/tree`), api(`/api/premises/${pid}/card/pre_storm`), api(`/api/premises/${pid}/card/why`)]);
+  S.tree = tree; S.pre = pre; S.why = why;
+  await loadReplay(false);
+  renderMap();
+}
+
+let rTimer = null;
+function debounceReplay() { clearTimeout(rTimer); rTimer = setTimeout(() => loadReplay(true), 250); }
+async function loadReplay(isWhatIf) {
+  const before = S.replay;
+  const w = S.whatIf, q = new URLSearchParams({ premise_id: S.persona.premise_id });
+  if (w.crews) q.set("crews", w.crews);
+  if (w.poles) q.set("extra_poles", w.poles);
+  if (w.access !== 1) q.set("access", w.access);
+  S.replay = await api("/api/view/replay?" + q);
+  const end = S.replay.status === "ok" ? Math.ceil(S.replay.restored_h + 3) : 24;
+  $("t").max = end;
+  if (!isWhatIf && S.t > end) S.t = end;
+  if (isWhatIf) describeWhatIf(before, S.replay);
+  renderCone(); renderTime();
+}
+
+function stepAt(t) {
+  if (!S.replay || S.replay.status !== "ok") return null;
+  let s = null;
+  for (const x of S.replay.steps) if (x.t <= t) s = x;
+  return s;
+}
+
+function describeWhatIf(before, after) {
+  const el = $("whatif-out");
+  if (!before || before.status !== "ok" || after.status !== "ok") { el.textContent = ""; return; }
+  const t = Math.max(S.t, after.outage_h);
+  const a = stepAt.call(null, t);
+  const b = (() => { let s = null; for (const x of before.steps) if (x.t <= t) s = x; return s; })();
+  if (!a || !b) { el.textContent = "Move the storm clock into the outage to compare."; return; }
+  const diff = a.p50 - b.p50;
+  const dir = Math.abs(diff) < 0.5 ? "about the same" : diff > 0 ? `about ${Math.round(diff)} h later` : `about ${Math.round(-diff)} h sooner`;
+  el.innerHTML = `As of ${esc(clockAt(t))}, most likely restore: <b>${esc(clockAt(a.p50))}</b> (${dir}). Window ${esc(clockAt(a.p10))}–${esc(clockAt(a.p90))}.`
+    + (S.replay.what_if_note ? `<div class="caveat">${esc(S.replay.what_if_note)}</div>` : "");
+}
+
+// ---------- time-driven views ----------
+function renderTime() {
+  $("t").value = S.t;
+  const t = S.t, R = S.replay;
+  $("clock").textContent = fullClock(t);
+  let phase;
+  if (t < 0) phase = `Before the storm · arrives in ${Math.round(-t)} h`;
+  else if (R && R.status === "ok" && t >= R.outage_h && t < R.restored_h) phase = `Storm hour ${t} · power out`;
+  else if (R && R.status === "ok" && t >= R.restored_h) phase = `Storm hour ${t} · power restored`;
+  else phase = `Storm hour ${t} · power on`;
+  $("phase").textContent = phase;
+  renderLanes(); renderPhone(); renderTree(); paintMapOutages(); moveConeCursor();
+}
+
+function latestEvent(t) {
+  if (!S.replay || S.replay.status !== "ok") return null;
+  let e = null;
+  for (const x of S.replay.events) if (x.t <= t) e = x;
+  return e;
+}
+
+function list(items) { return items && items.length ? `<ul>${items.map(i => `<li>${esc(i)}</li>`).join("")}</ul>` : ""; }
+
+function renderLanes() {
+  const t = S.t, R = S.replay, pre = S.pre.card, why = S.why.card;
+  const risk = pre.risk;
+  let ok = "", est = "", act = "";
+  const riskHtml = risk
+    ? `<div class="big">${esc(risk.band)} risk</div><div>${esc(risk.confidence)} confidence</div>${list(risk.top_factors)}`
+    : `<div class="big">Not enough data</div><div>${esc(pre.general_guidance || "")}</div>`;
+  const out = R && R.status === "ok" && t >= R.outage_h && t < R.restored_h;
+  const back = R && R.status === "ok" && t >= R.restored_h;
+  if (t < 0) {
+    ok = `<div class="big">${esc(pre.storm.name)} is coming</div><div>Arrives in about ${Math.round(-t)} h with winds up to ${pre.storm.max_wind_mph} mph.</div>`;
+    est = riskHtml + (pre.restoration ? `<div class="note">If power goes out: likely ${esc(pre.restoration.hours_range)}.</div>` : "");
+    act = list(pre.actions.slice(0, 4));
+  } else if (out) {
+    const fixed = [];
+    S.tree.forEach(n => n.damage.forEach(d => { if (d.done_h <= t) fixed.push(`Crews fixed ${d.text} (${n.label.toLowerCase()})`); }));
+    ok = `<div class="big">Power out since ${esc(clockAt(R.outage_h))}</div>${list(fixed)}`;
+    const s = stepAt(t), ev = latestEvent(t);
+    const c = ev && ev.card && ev.card.restoration;
+    est = s ? `<div class="big">Back ~${esc(clockAt(s.p50))}</div><div>Window ${esc(clockAt(s.p10))}–${esc(clockAt(s.p90))}${c ? " · " + esc(c.confidence) + " confidence" : ""}</div>${c ? list(c.drivers.slice(0, 3)) : ""}<div class="note">Model estimate, not a promise.</div>` : "";
+    act = list((ev && ev.card ? ev.card.actions : []).slice(0, 4));
+  } else if (back) {
+    ok = `<div class="big">Power restored at ${esc(clockAt(R.restored_h))}</div><div>Out for ${Math.round(R.restored_h - R.outage_h)} h.</div>`;
+    est = `<div class="big">No estimate needed</div><div class="note">Still out? Text OUT.</div>`;
+    act = list(["Toss fridge food that was above 40F for over 4 hrs.", "Reset clocks and check your medical devices."]);
+  } else {
+    ok = `<div class="big">${t >= 0 ? "Storm has arrived. Power is on." : ""}</div>${R && R.status !== "ok" ? "<div>No damage on this line in the replayed storm.</div>" : ""}`;
+    est = riskHtml;
+    act = list(pre.actions.slice(0, 3));
+  }
+  $("lane-ok").innerHTML = ok; $("lane-est").innerHTML = est; $("lane-do").innerHTML = act;
+}
+
+function renderPhone() {
+  const t = S.t, R = S.replay, el = $("msgs");
+  const items = [{ at: "Sat 8pm", text: S.pre.text, seg: S.pre.segments }];
+  if (S.pre.card.risk || S.pre.card.fallback) {} // pre-storm alert always shown for the demo
+  if (R && R.status === "ok") for (const e of R.events) if (e.t <= t) items.push({ at: e.clock, text: e.text, seg: e.segments, kind: e.kind });
+  const html = items.map((m, i) => `<div><div class="bubble ${i === items.length - 1 && i >= S.lastEventCount && i > 0 ? "new" : ""}">${esc(m.text)}</div><div class="meta">${esc(m.at)} · ${m.seg} SMS</div></div>`).join("");
+  el.innerHTML = html || `<div class="empty">No texts yet.</div>`;
+  if (items.length !== S.lastEventCount) el.scrollTop = el.scrollHeight;
+  S.lastEventCount = items.length;
+}
+
+const STATUS = {
+  normal: ["var(--muted)", "Normal"], damaged: ["var(--critical)", "Damaged"], fixed: ["var(--good)", "Fixed"],
+  on: ["var(--good)", "Power on"], out: ["var(--critical)", "Power out"],
+};
+function renderTree() {
+  const t = S.t;
+  let upstreamDead = false;
+  const parts = S.tree.map((n, i) => {
+    const seen = t < 0 ? [] : n.damage.filter(d => d.report_h <= t);
+    const open = seen.filter(d => d.done_h > t), fixed = seen.filter(d => d.done_h <= t);
+    let st = open.length ? "damaged" : fixed.length ? "fixed" : "normal";
+    if (n.type === "HOME") st = upstreamDead ? "out" : "on";
+    const arrowDead = upstreamDead;
+    if (open.length) upstreamDead = true;
+    const [color, label] = STATUS[st];
+    const items = [...open.map(d => `<li>⚠ ${esc(d.text)}</li>`), ...fixed.map(d => `<li class="fixed">${esc(d.text)}</li>`)].join("");
+    const arrow = i ? `<div class="arrow ${arrowDead ? "dead" : ""}" aria-hidden="true">→</div>` : "";
+    return `${arrow}<div class="node"><h4>${esc(n.label)}</h4><span class="status"><span class="dot" style="background:${color}"></span>${label}</span>${items ? `<ul class="items">${items}</ul>` : ""}${n.history ? `<div class="hist">${esc(n.history)}</div>` : ""}</div>`;
+  });
+  $("tree").innerHTML = parts.join("");
+}
+
+// ---------- cone chart ----------
+let coneGeom = null;
+function renderCone() {
+  const el = $("cone"), R = S.replay;
+  if (!R || R.status !== "ok") {
+    el.innerHTML = `<div class="empty" style="padding:60px 0">This line had no damage in the replayed storm. Pick Maria or Sam to see a replay.</div>`;
+    $("cone-table").innerHTML = ""; coneGeom = null; return;
+  }
+  const W = Math.max(320, el.clientWidth || 640), H = 300, m = { l: 64, r: 16, t: 10, b: 30 };
+  const steps = R.steps;
+  const xMax = Math.ceil(R.restored_h + 3);
+  const yMaxRaw = Math.max(...steps.map(s => s.p90), R.restored_h + 6);
+  const yMax = Math.min(Math.ceil(yMaxRaw / 6) * 6, 72);
+  const x = h => m.l + (h / xMax) * (W - m.l - m.r);
+  const y = h => m.t + (1 - Math.min(h, yMax) / yMax) * (H - m.t - m.b);
+  let g = "";
+  for (let v = 0; v <= yMax; v += 12) g += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(v)}" y2="${y(v)}" stroke="var(--grid)"/><text x="${m.l - 8}" y="${y(v) + 4}" text-anchor="end">${clockAt(v)}</text>`;
+  const xStep = Math.max(3, Math.ceil((xMax * 78 / (W - m.l - m.r)) / 3) * 3);
+  for (let v = 0; v <= xMax; v += xStep) g += `<text x="${x(v)}" y="${H - 10}" text-anchor="middle">${clockAt(v)}</text>`;
+  g += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(0)}" y2="${y(0)}" stroke="var(--axis)"/>`;
+  // "now" diagonal: an estimate can never be in the past
+  g += `<line x1="${x(0)}" y1="${y(0)}" x2="${x(Math.min(xMax, yMax))}" y2="${y(Math.min(xMax, yMax))}" stroke="var(--axis)" stroke-dasharray="2 4"/>`;
+  // battery line for declared needs
+  (S.persona.declared_needs || []).filter(n => n.battery_hours && n.need !== "insulin_fridge").forEach(n => {
+    const yy = R.outage_h + n.battery_hours;
+    g += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(yy)}" y2="${y(yy)}" stroke="var(--serious)" stroke-dasharray="4 3"/><text x="${W - m.r - 4}" y="${y(yy) + 15}" text-anchor="end" class="ink2">⚠ ${esc(n.need)} battery empty ~${clockAt(yy)}</text>`;
+  });
+  const area = steps.map(s => `${x(s.t)},${y(s.p90)}`).join(" ") + " " + steps.slice().reverse().map(s => `${x(s.t)},${y(s.p10)}`).join(" ");
+  g += `<polygon points="${area}" fill="var(--band-fill)" stroke="none"/>`;
+  g += `<polyline points="${steps.map(s => `${x(s.t)},${y(s.p50)}`).join(" ")}" fill="none" stroke="var(--series-1)" stroke-width="2" stroke-linejoin="round"/>`;
+  // actual restore
+  g += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(R.restored_h)}" y2="${y(R.restored_h)}" stroke="var(--ink)" stroke-dasharray="6 4"/><text x="${W - m.r - 4}" y="${y(R.restored_h) + 15}" text-anchor="end" class="ink">Power actually back ${clockAt(R.restored_h)}</text>`;
+  // text markers
+  const p50At = t => { let s = steps[0]; for (const z of steps) if (z.t <= t) s = z; return s.p50; };
+  R.events.filter(e => e.kind !== "restored").forEach((e, i) => {
+    g += `<circle class="ev" data-i="${i}" cx="${x(e.t)}" cy="${y(p50At(e.t))}" r="5" fill="var(--ink)" stroke="var(--surface)" stroke-width="2"/>`;
+  });
+  g += `<line id="cone-cursor" y1="${m.t}" y2="${H - m.b}" stroke="var(--ink-2)" stroke-width="1"/>`;
+  g += `<rect id="cone-hit" x="${m.l}" y="${m.t}" width="${W - m.l - m.r}" height="${H - m.t - m.b}" fill="transparent"/>`;
+  el.innerHTML = `<svg width="100%" viewBox="0 0 ${W} ${H}" role="img" aria-label="Estimated restoration window over time, narrowing toward the actual restoration time">${g}</svg>`;
+  coneGeom = { x, y, xMax, W, m };
+  const svg = el.querySelector("svg");
+  svg.querySelector("#cone-hit").addEventListener("mousemove", e => {
+    const r = svg.getBoundingClientRect(), px = (e.clientX - r.left) * (W / r.width);
+    const h = (px - m.l) / (W - m.l - m.r) * xMax;
+    const s = stepAt(h);
+    if (!s) return showTip(e, `${clockAt(h)}: power still on here`);
+    showTip(e, `As of ${clockAt(s.t)}:\nmost likely back ${clockAt(s.p50)}\nwindow ${clockAt(s.p10)}–${clockAt(s.p90)}`);
+  });
+  svg.querySelector("#cone-hit").addEventListener("mouseleave", hideTip);
+  svg.querySelector("#cone-hit").addEventListener("click", e => {
+    const r = svg.getBoundingClientRect(), px = (e.clientX - r.left) * (W / r.width);
+    S.t = Math.max(0, Math.round(((px - m.l) / (W - m.l - m.r) * xMax) * 2) / 2); stopPlay(); renderTime();
+  });
+  svg.querySelectorAll(".ev").forEach(c => {
+    const ev = R.events[+c.dataset.i];
+    c.addEventListener("mouseenter", e => showTip(e, `${ev.clock} text:\n${ev.text}`));
+    c.addEventListener("mousemove", moveTip);
+    c.addEventListener("mouseleave", hideTip);
+  });
+  $("cone-table").innerHTML = `<table><tr><th>As of</th><th>P10</th><th>P50</th><th>P90</th></tr>${steps.map(s => `<tr><td>${clockAt(s.t)}</td><td>${clockAt(s.p10)}</td><td>${clockAt(s.p50)}</td><td>${clockAt(s.p90)}</td></tr>`).join("")}</table>`;
+  moveConeCursor();
+}
+function moveConeCursor() {
+  const c = document.getElementById("cone-cursor");
+  if (!c || !coneGeom) return;
+  const t = Math.max(0, Math.min(S.t, coneGeom.xMax));
+  c.setAttribute("x1", coneGeom.x(t)); c.setAttribute("x2", coneGeom.x(t));
+  c.style.display = S.t < 0 ? "none" : "";
+}
+
+// ---------- map ----------
+const BAND = { Low: "var(--risk-low)", Elevated: "var(--risk-elevated)", High: "var(--risk-high)", Severe: "var(--risk-severe)" };
+function renderMap() {
+  const el = $("map");
+  const W = Math.max(300, el.clientWidth || 480);
+  const blocksPerRow = 4, gap = 14;
+  const r = Math.min(22, (W - gap * (blocksPerRow - 1)) / (blocksPerRow * 2 + 0.5) / Math.sqrt(3));
+  const hw = Math.sqrt(3) * r, vh = 1.5 * r;
+  let g = "", maxY = 0;
+  const hex = (cx, cy) => Array.from({ length: 6 }, (_, k) => { const a = Math.PI / 180 * (60 * k - 30); return `${cx + r * Math.cos(a)},${cy + r * Math.sin(a)}`; }).join(" ");
+  S.map.forEach((c, i) => {
+    const parts = c.cell.split("-"), rf = parts[2];
+    const zone = (+rf[0] - 1) * 2 + (+rf[1] - 1);
+    const bx = (c.circuit_n - 1) % blocksPerRow, by = Math.floor((c.circuit_n - 1) / blocksPerRow);
+    const col = zone % 2, row = Math.floor(zone / 2);
+    const cx = r + 2 + bx * (2 * hw + hw / 2 + gap) + col * hw + (row ? hw / 2 : 0);
+    const cy = r + 2 + by * (2 * vh + r / 2 + gap + 12) + row * vh;
+    maxY = Math.max(maxY, cy + r + 16);
+    const fill = c.band ? BAND[c.band] : "url(#nodata)";
+    const mine = S.persona && S.persona.premise_id === c.premise_id;
+    g += `<polygon class="cell" data-i="${i}" points="${hex(cx, cy)}" fill="${fill}" stroke="var(--surface)" stroke-width="2" style="cursor:pointer"/>`;
+    g += `<polygon class="out" data-i="${i}" points="${hex(cx, cy)}" fill="none" stroke="var(--critical)" stroke-width="3" stroke-dasharray="4 2" style="pointer-events:none;display:none"/>`;
+    if (mine) g += `<polygon points="${hex(cx, cy)}" fill="none" stroke="var(--ink)" stroke-width="3" style="pointer-events:none"/><text x="${cx}" y="${cy + 4}" text-anchor="middle" style="fill:var(--ink);stroke:var(--surface);stroke-width:3px;paint-order:stroke;font-weight:700;font-size:12px;pointer-events:none">You</text>`;
+    if (zone === 2) g += `<text x="${cx - hw / 2}" y="${cy + r + 13}">C${String(c.circuit_n).padStart(2, "0")}</text>`;
+  });
+  const defs = `<defs><pattern id="nodata" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" fill="var(--risk-none)"/><line x1="0" y1="0" x2="0" y2="6" stroke="var(--muted)" stroke-width="1.5"/></pattern></defs>`;
+  el.innerHTML = `<svg width="100%" viewBox="0 0 ${W} ${maxY}" role="img" aria-label="Outage risk by area">${defs}${g}</svg>`;
+  el.querySelectorAll(".cell").forEach(p => {
+    const c = S.map[+p.dataset.i];
+    p.addEventListener("mouseenter", e => {
+      const win = c.outage_windows.length ? `\nIn the replayed storm: out ${clockAt(Math.min(...c.outage_windows.map(w => w[0])))}–${clockAt(Math.max(...c.outage_windows.map(w => w[1])))}` : "\nNo damage in the replayed storm";
+      showTip(e, `Circuit ${c.circuit_n}, area ${p.dataset.i % 4 + 1}\nRisk: ${c.band ? c.band + " (" + Math.round(c.probability * 100) + "%)" : "not enough data"}${win}`);
+    });
+    p.addEventListener("mousemove", moveTip);
+    p.addEventListener("mouseleave", hideTip);
+    p.addEventListener("click", () => {
+      const known = S.personas.findIndex(x => x.premise_id === c.premise_id);
+      const persona = known >= 0 ? S.personas[known] : { name: `Circuit ${c.circuit_n} area`, premise_id: c.premise_id, declared_needs: [] };
+      if (known < 0) {
+        S.personas.push(persona);
+        $("persona").insertAdjacentHTML("beforeend", `<option value="${S.personas.length - 1}">${esc(persona.name)}</option>`);
+      }
+      $("persona").value = S.personas.indexOf(persona);
+      selectPersona(persona);
+    });
+  });
+  $("map-legend").innerHTML = ["Low", "Elevated", "High", "Severe"].map(b => `<span><span class="sw" style="background:${BAND[b]}"></span>${b}</span>`).join("")
+    + `<span><span class="sw" style="background:url(#);background:repeating-linear-gradient(45deg,var(--risk-none) 0 3px,var(--muted) 3px 4px)"></span>Not enough data</span>`
+    + `<span><span class="sw" style="border:2px dashed var(--critical);background:none"></span>Power out (replay)</span>`;
+  paintMapOutages();
+}
+function paintMapOutages() {
+  const t = S.t;
+  document.querySelectorAll("#map .out").forEach(p => {
+    const c = S.map[+p.dataset.i];
+    const out = t >= 0 && c.outage_windows.some(([a, b]) => a <= t && t < b);
+    p.style.display = out ? "" : "none";
+  });
+}
+
+// ---------- honesty ----------
+let stripCases = [];
+async function loadStrip() {
+  stripCases = await api(`/api/backtest/cases?calibrated=${S.calibrated}`);
+  const bt = S.backtest, s = S.calibrated ? bt.calibrated_on_test : bt.raw_on_test, raw = bt.raw_on_test;
+  const pct = v => Math.round(v * 100) + "%";
+  $("tiles").innerHTML = `
+    <div class="tile"><div class="k">Real time inside our range</div><div class="v">${pct(s.coverage)}</div><div class="d">target 80% · ${s.cases} outages</div></div>
+    <div class="tile"><div class="k">We said too soon</div><div class="v">${pct(s.too_optimistic)}</div><div class="d">${S.calibrated ? "was " + pct(raw.too_optimistic) + " before calibration" : "the costly mistake"}</div></div>
+    <div class="tile"><div class="k">Typical range width</div><div class="v">${s.median_range_width_h} h</div><div class="d">${S.calibrated ? "was " + raw.median_range_width_h + " h: honesty costs precision" : "narrow but often wrong"}</div></div>`;
+  renderStrip();
+}
+function renderStrip() {
+  const el = $("strip");
+  if (!stripCases.length) return;
+  const W = Math.max(300, el.clientWidth || 480), H = 200, m = { l: 36, r: 8, t: 8, b: 20 };
+  const cases = stripCases.slice().sort((a, b) => a.p50 - b.p50);
+  const yMax = 48;
+  const x = i => m.l + (i + 0.5) / cases.length * (W - m.l - m.r);
+  const y = h => m.t + (1 - Math.min(h, yMax) / yMax) * (H - m.t - m.b);
+  let g = "";
+  for (let v = 0; v <= yMax; v += 12) g += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(v)}" y2="${y(v)}" stroke="var(--grid)"/><text x="${m.l - 6}" y="${y(v) + 4}" text-anchor="end">${v}h</text>`;
+  g += `<text x="${m.l}" y="${H - 4}">Each column is one outage, sorted by our estimate</text>`;
+  const bw = Math.max(1.5, Math.min(3, (W - m.l - m.r) / cases.length - 1));
+  cases.forEach((c, i) => {
+    g += `<rect x="${x(i) - bw / 2}" y="${y(c.p90)}" width="${bw}" height="${Math.max(1, y(c.p10) - y(c.p90))}" rx="1" fill="var(--strip)"/>`;
+    if (c.inside) g += `<circle cx="${x(i)}" cy="${y(c.actual)}" r="2.6" fill="var(--series-1)"/>`;
+    else { const cx = x(i), cy = y(c.actual), k = 3; g += `<path d="M${cx - k},${cy - k}L${cx + k},${cy + k}M${cx - k},${cy + k}L${cx + k},${cy - k}" stroke="var(--critical)" stroke-width="1.6"/>`; }
+    g += `<rect class="hit" data-i="${i}" x="${x(i) - (W - m.l - m.r) / cases.length / 2}" y="${m.t}" width="${(W - m.l - m.r) / cases.length}" height="${H - m.t - m.b}" fill="transparent"/>`;
+  });
+  el.innerHTML = `<svg width="100%" viewBox="0 0 ${W} ${H}" role="img" aria-label="Backtest: each outage's predicted range and the real restoration time">${g}</svg>`;
+  el.querySelectorAll(".hit").forEach(h => {
+    const c = cases[+h.dataset.i];
+    h.addEventListener("mouseenter", e => showTip(e, `Range ${c.p10}–${c.p90} h (likely ${c.p50} h)\nReal: ${c.actual} h · ${c.inside ? "inside ✓" : "outside ✕"}`));
+    h.addEventListener("mousemove", moveTip);
+    h.addEventListener("mouseleave", hideTip);
+  });
+}
+
+// ---------- play ----------
+function togglePlay() {
+  if (S.playing) return stopPlay();
+  if (S.t >= +$("t").max) S.t = -PRE_H;
+  $("play").textContent = "❚❚"; $("play").setAttribute("aria-label", "Pause");
+  S.playing = setInterval(() => {
+    S.t = Math.min(+$("t").max, S.t + (S.t < 0 ? 3 : 0.5));
+    renderTime();
+    if (S.t >= +$("t").max) stopPlay();
+  }, 220);
+}
+function stopPlay() {
+  if (S.playing) clearInterval(S.playing);
+  S.playing = null; $("play").textContent = "▶"; $("play").setAttribute("aria-label", "Play storm replay");
+}
+
+init().catch(err => { document.querySelector("main").innerHTML = `<div class="card">Couldn't load: ${esc(err.message)}</div>`; });
+</script>
+</body>
+</html>

@@ -1,0 +1,8 @@
+damage_type,labor_hours_per_unit
+pole_replace,6.0
+crossarm_replace,3.0
+insulator_replace,1.5
+conductor_repair,2.5
+tree_removal,2.0
+transformer_replace,4.0
+fuse_replace,0.75

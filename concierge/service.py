@@ -1,0 +1,240 @@
+"""Orchestration: the demo "world" (storm clock + what-ifs), fact cards, and
+proactive alerts. SMS, voice, and the web view all call into this module.
+"""
+from __future__ import annotations
+
+import hashlib
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta
+
+from . import backtest, prep, rules
+from .data import Dataset, get_dataset
+from .factcard import audit, build
+from .narrate import render
+from .replay import event_records, scenario_at
+from .restoration import estimate, explain_change, prestorm_scenario
+from .risk import predict
+
+STORM_START = datetime(2026, 10, 25, 14, 0)  # when the demo storm hits
+
+
+@dataclass
+class World:
+    phase: str = "pre_storm"  # pre_storm | outage
+    t_h: float = 0.0  # hours since the storm hit (outage phase)
+    what_if: dict = field(default_factory=dict)
+
+    def now(self, ds: Dataset) -> datetime:
+        if self.phase == "pre_storm":
+            return STORM_START - timedelta(hours=ds.current_storm["eta_hours"])
+        return STORM_START + timedelta(hours=self.t_h)
+
+
+@dataclass
+class Session:
+    customer: dict
+    battery_mode: bool = False
+    emoji: bool = False  # plain GSM-7 text fits 160 chars per SMS; emoji drops it to 70
+    last_sent: dict | None = None  # last estimate we texted, for "here's why"
+    last_scenario: object = None
+    outage_announced: bool = False
+    restored_announced: bool = False
+    escalations_sent: set = field(default_factory=set)
+
+
+WORLD = World()
+SESSIONS: dict[str, Session] = {}
+
+
+def who(phone: str) -> str:
+    """Audit-log identity: a hash, never the raw phone number."""
+    return hashlib.sha256(phone.encode()).hexdigest()[:10]
+
+
+def fmt_clock(dt: datetime, now: datetime) -> str:
+    dt = (dt + timedelta(minutes=30)).replace(minute=0, second=0, microsecond=0)
+    h = dt.hour % 12 or 12
+    s = f"{h}{'am' if dt.hour < 12 else 'pm'}"
+    return s if dt.date() == now.date() else f"{dt.strftime('%a')} {s}"
+
+
+def _conf(h: dict) -> str:
+    spread = (h["p90"] - h["p10"]) / max(h["p50"], 1)
+    return "high" if spread < 1.0 else "medium" if spread < 2.0 else "low"
+
+
+# ---------- engine calls ----------
+
+def risk_for(customer: dict, ds: Dataset | None = None) -> dict:
+    return predict(customer["premise_id"], ds=ds)
+
+
+def restoration_for(customer: dict, world: World = WORLD, ds: Dataset | None = None):
+    ds = ds or get_dataset()
+    pid = customer["premise_id"]
+    calib = backtest.calibration(ds)
+    if world.phase == "pre_storm":
+        sc = prestorm_scenario(pid, ds.current_storm, ds)
+        if world.what_if.get("crews"):
+            sc.crews = int(world.what_if["crews"])
+        sc.access = float(world.what_if.get("access", 1.0))
+    else:
+        sc = scenario_at(ds, pid, ds.current_storm["replay_of_event"], world.t_h, world.what_if)
+    return estimate(pid, sc, n_sims=800, seed=7, ds=ds, calib=calib), sc
+
+
+def outage_start_h(customer: dict, ds: Dataset | None = None) -> float | None:
+    ds = ds or get_dataset()
+    recs = event_records(ds, ds.current_storm["replay_of_event"], ds.circuit_of(customer["premise_id"]))
+    on_path = recs.loc[recs.device_id.isin(ds.path(customer["premise_id"]))]
+    return None if on_path.empty else float(on_path.report_h.min())
+
+
+def restored_h(customer: dict, ds: Dataset | None = None) -> float | None:
+    ds = ds or get_dataset()
+    recs = event_records(ds, ds.current_storm["replay_of_event"], ds.circuit_of(customer["premise_id"]))
+    on_path = recs.loc[recs.device_id.isin(ds.path(customer["premise_id"]))]
+    return None if on_path.empty else float(on_path.done_h.max())
+
+
+def is_out(customer: dict, world: World = WORLD) -> bool:
+    if world.phase != "outage":
+        return False
+    start, end = outage_start_h(customer), restored_h(customer)
+    return start is not None and start <= world.t_h < end
+
+
+# ---------- fact cards ----------
+
+def make_card(kind: str, customer: dict, world: World = WORLD, extra: dict | None = None,
+              est: dict | None = None, ds: Dataset | None = None) -> dict:
+    ds = ds or get_dataset()
+    now = world.now(ds)
+    rk = risk_for(customer, ds)
+    if est is None and (world.phase == "pre_storm" or is_out(customer, world)):
+        est, _ = restoration_for(customer, world, ds)
+    needs = customer.get("declared_needs", [])
+    raw = {"kind": kind, "is_model_estimate": True,
+           "storm": {"name": ds.current_storm["name"], "eta_hours": ds.current_storm["eta_hours"],
+                     "max_wind_mph": ds.current_storm["max_wind_mph"]},
+           "declared_needs": [n["need"] for n in needs],
+           "battery_mode": bool(extra and extra.get("battery_mode"))}
+    if rk["status"] == "ok":
+        sims = rk["similar_storms"]
+        raw["risk"] = {"band": rk["band"], "confidence": rk["confidence"],
+                       "top_factors": [f["factor"] for f in rk["top_factors"]], "history": rk["history"],
+                       "similar_storms_summary": f"In {len(sims)} similar past storms, your area lost power in {sum(s['lost_power'] for s in sims)}"}
+        raw["honesty"] = backtest.honesty_line(rk["circuit_id"], ds)
+    else:
+        raw["fallback"] = True
+        raw["general_guidance"] = rk.get("general_guidance", "Plan for up to a day without power.")
+    p90_total = None
+    if est and est.get("status") == "ok":
+        h = est["hours_from_now"]
+        raw["restoration"] = {
+            "window": f"{fmt_clock(now + timedelta(hours=h['p10']), now)}-{fmt_clock(now + timedelta(hours=h['p90']), now)}",
+            "likely": fmt_clock(now + timedelta(hours=h["p50"]), now),
+            "hours_range": f"{round(h['p10'])}-{round(h['p90'])} hrs",
+            "confidence": _conf(h),
+            "drivers": est["drivers"],
+            "step_restoration": est["step_restoration"],
+        }
+        if est["step_restoration"] and est.get("upstream_fixed_p50") is not None:
+            raw["restoration"]["upstream_first_by"] = fmt_clock(now + timedelta(hours=est["upstream_fixed_p50"]), now)
+        p90_total = h["p90"]
+    raw["actions"] = prep.actions(rk.get("band"), p90_total, needs, "outage" if is_out(customer, world) else "pre_storm")
+    if kind == "plan" and est and est.get("status") == "ok":
+        h = est["hours_from_now"]
+        raw["power_budget"] = prep.power_budget(needs, h["p10"], h["p90"])
+    if kind == "worse":
+        raw["safety"] = prep.SAFETY
+    if kind == "alerts":
+        plan = rules.alert_plan(customer, rk, est)
+        raw["alerts"] = {k: plan[k] for k in ("eligible", "enrolled", "channels", "eligibility_reason")}
+        raw["alerts"]["pre_storm_hours_before"] = plan["pre_storm_alert_hours_before"]
+    if extra:
+        raw.update({k: v for k, v in extra.items() if k != "battery_mode"})
+    return build(raw, audit_who=who(customer.get("phone", "anon")))
+
+
+def message(kind: str, customer: dict, session: Session | None = None, **kw) -> dict:
+    extra = dict(kw.pop("extra", {}) or {})
+    if session:
+        extra["battery_mode"] = session.battery_mode
+    card = make_card(kind, customer, extra=extra, **kw)
+    out = render(card, emoji=session.emoji if session else False)
+    out["card"] = card
+    return out
+
+
+# ---------- proactive alerts ----------
+
+def proactive(session: Session, world: World = WORLD, ds: Dataset | None = None) -> list[dict]:
+    """What would we send this customer right now? Call after the clock or a what-if changes."""
+    ds = ds or get_dataset()
+    c = session.customer
+    out = []
+
+    def send(kind, **kw):
+        if session.battery_mode and not rules.allowed_in_battery_mode(kind):
+            audit("suppressed_battery_mode", who(c["phone"]), kind)
+            return
+        m = message(kind, c, session, **kw)
+        m["kind"] = kind
+        out.append(m)
+
+    if world.phase == "pre_storm":
+        rk = risk_for(c, ds)
+        lead = rules.pre_storm_lead_hours(rk.get("band"))
+        if c.get("alerts_opt_in") and (lead or rk["status"] != "ok"):
+            send("pre_storm")
+        return out
+
+    start, end = outage_start_h(c, ds), restored_h(c, ds)
+    if start is None or world.t_h < start:
+        return out
+    if world.t_h >= end:
+        if not session.restored_announced:
+            session.restored_announced = True
+            send("restored", extra={"restored_at": fmt_clock(STORM_START + timedelta(hours=end), world.now(ds))})
+        return out
+    est, sc = restoration_for(c, world, ds)
+    if not session.outage_announced:
+        session.outage_announced = True
+        send("outage_confirmed", est=est)
+        session.last_sent, session.last_scenario = est, sc
+    else:
+        ok, _ = rules.should_send_update(session.last_sent, est, c, outage_start_h=start)
+        reasons = explain_change(session.last_scenario, sc, c["premise_id"], ds) if session.last_scenario else []
+        if ok and (reasons or abs((est["now_h"] + est["hours_from_now"]["p50"]) - (session.last_sent["now_h"] + session.last_sent["hours_from_now"]["p50"])) >= 2):
+            send("estimate_updated", est=est, extra={"reasons_changed": reasons or ["damage assessment is further along"]})
+            session.last_sent, session.last_scenario = est, sc
+    plan = rules.alert_plan(c, risk_for(c, ds), est, hours_already_out=world.t_h - start)
+    for e in plan["escalations"]:
+        key = (e["rule"], e.get("need"))
+        if key not in session.escalations_sent:
+            session.escalations_sent.add(key)
+            audit("escalation", who(c["phone"]), e)
+            out.append({"kind": "escalation", "action": e["action"], "why": e["why"], "rule": e["rule"]})
+    return out
+
+
+def advance(to_h: float, world: World = WORLD) -> dict[str, list[dict]]:
+    """Move the demo clock (storm hours) and collect proactive messages for every known session."""
+    ds = get_dataset()
+    world.phase = "outage"
+    sent = {}
+    for t in [x * 0.5 for x in range(int(world.t_h * 2) + 1, int(to_h * 2) + 1)] or [to_h]:
+        world.t_h = t
+        for phone, s in SESSIONS.items():
+            msgs = proactive(s, world, ds)
+            if msgs:
+                sent.setdefault(phone, []).extend({**m, "at": fmt_clock(world.now(ds), world.now(ds))} for m in msgs)
+    world.t_h = to_h
+    return sent
+
+
+def reset_world():
+    global WORLD
+    WORLD.phase, WORLD.t_h, WORLD.what_if = "pre_storm", 0.0, {}
+    SESSIONS.clear()

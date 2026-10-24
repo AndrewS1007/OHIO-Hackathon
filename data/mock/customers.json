@@ -1,0 +1,36 @@
+[
+  {
+    "phone": "+15550100001",
+    "name": "Maria",
+    "premise_id": "P57423",
+    "alerts_opt_in": true,
+    "declared_needs": [
+      {
+        "need": "CPAP",
+        "battery_hours": 8
+      }
+    ],
+    "language": "en"
+  },
+  {
+    "phone": "+15550100002",
+    "name": "Dev",
+    "premise_id": "P21104",
+    "alerts_opt_in": true,
+    "declared_needs": [],
+    "language": "en"
+  },
+  {
+    "phone": "+15550100003",
+    "name": "Sam",
+    "premise_id": "P81020",
+    "alerts_opt_in": false,
+    "declared_needs": [
+      {
+        "need": "insulin_fridge",
+        "battery_hours": 4
+      }
+    ],
+    "language": "en"
+  }
+]

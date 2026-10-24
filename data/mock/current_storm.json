@@ -1,0 +1,8 @@
+{
+  "name": "Storm Kestrel",
+  "eta_hours": 18,
+  "max_wind_mph": 66,
+  "ice_in": 0.0,
+  "replay_of_event": "E07",
+  "note": "Forecast for the demo. 'replay_of_event' is the past storm we replay once the outage starts."
+}

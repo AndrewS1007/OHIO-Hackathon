@@ -1,0 +1,15 @@
+circuit_id,substation_id,region,district,overhead_pct,length_mi
+C01,S1,R-North,D1,0.76,12.3
+C02,S1,R-North,D1,0.86,9.2
+C03,S1,R-North,D1,0.58,12.8
+C04,S1,R-North,D2,0.84,5.2
+C05,S2,R-North,D2,0.6,12.2
+C06,S2,R-North,D2,0.77,9.2
+C07,S2,R-North,D3,0.86,8.8
+C08,S2,R-South,D3,0.56,3.5
+C09,S3,R-South,D3,0.49,13.6
+C10,S3,R-South,D4,0.63,10.9
+C11,S3,R-South,D4,0.63,7.5
+C12,S3,R-South,D4,0.64,5.2
+C13,S4,R-South,D5,0.61,4.4
+C14,S4,R-South,D5,0.79,5.1
