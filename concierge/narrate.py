@@ -140,25 +140,30 @@ import json
 
 def _llm_enabled() -> bool:
     # Always turn on if the variable is set
-    return os.environ.get("CONCIERGE_USE_LLM") == "1"
+    return True
 
 def _llm_rewrite(card: dict, draft: str, max_chars: int) -> str | None:
     try:
         system_prompt = SYSTEM.format(max_chars=max_chars)
         user_prompt = f"FACT CARD:\n{json.dumps(card, ensure_ascii=False)}\n\nDRAFT:\n{draft}"
         
-        # Call the local Ollama API
+        # Call the remote Ollama API
+        ollama_url = "http://<YOUR_REMOTE_IP>:11434"
         response = httpx.post(
-            "http://localhost:11434/api/chat",
+            f"{ollama_url}/api/chat",
             json={
-                "model": "qwen2.5:3b", # Match the model you downloaded
+                "model": "qwen2.5:3b",
                 "messages": [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
                 ],
-                "stream": False
+                "stream": False,
+                "options": {
+                    "temperature": 0,
+                    "num_ctx": 8192
+                }
             },
-            timeout=30.0 # Give your local machine a bit of time to think
+            timeout=30.0 
         )
         response.raise_for_status()
         

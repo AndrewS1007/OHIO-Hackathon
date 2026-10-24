@@ -17,6 +17,8 @@ Backends (CONCIERGE_AI picks one; default "auto"):
 """
 from __future__ import annotations
 
+
+
 import json
 import os
 import time
@@ -27,9 +29,9 @@ from .factcard import audit
 from .narrate import numbers_grounded, numbers_in
 
 MODEL = "claude-opus-5-5"
-OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434").rstrip("/")
-OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "qwen2.5:3b")
-OLLAMA_TIMEOUT = float(os.environ.get("OLLAMA_TIMEOUT", "240"))  # CPU-only laptops take a while per round
+OLLAMA_URL = "http://174.100.108.202:11434"
+OLLAMA_MODEL = "qwen2.5:3b"
+OLLAMA_TIMEOUT = 240.0
 MAX_TOOL_ROUNDS = 5
 MAX_HISTORY_MESSAGES = 24  # start a fresh conversation after this, rather than editing old turns
 
