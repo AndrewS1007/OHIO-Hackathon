@@ -1,1 +1,51 @@
 # OHIO-Hackathon
+
+The brief is the AEP “AI Outage Concierge” challenge. You need to build an assistant that, for a customer’s location before and during a storm, answers four questions: Will I lose power? How long will it take to come back? How should I prepare? Do I get alerts? Every answer has to be explained and show how sure it is. Here’s an idea you can start from.
+
+The idea: “StormSense”, a map plus a chat with what-if sliders
+
+The customer clicks a spot on a map or picks an anonymized premise. They get a one-screen “storm card” with three columns that are visually separate, because the brief asks for this:
+
+✅ Confirmed facts	📊 Our estimate	🧰 What you should do
+Storm forecast, any reported damage on your circuit	Risk band + confidence, restoration range (e.g. “8–20 hrs, most likely ~12”)	Prep checklist, safety warnings, alert sign-up
+
+Next to it is a chat box (“Why is my risk high?”, “What if crews are delayed?”). There’s also a scenario panel with sliders for storm severity, number of crews, road access and damage count, so the judges can change inputs and watch the estimate move. The brief explicitly asks for that.
+
+The trick that wins: math does the predicting, AI does the explaining
+
+Don’t let the AI model invent numbers. Build three small, solid engines and have the AI call them as tools, then turn their output into plain English. This one move covers the brief’s “responsible AI,” “no false precision,” and “explain every prediction” points.
+
+Risk engine (data: ARCOS damage plus circuit GIS)
+For each circuit, use past storm damage: how often it got damaged, what equipment it has (asset types), and how many protective devices sit upstream.
+Combine that with storm severity into a simple score, or a small logistic regression or LightGBM model.
+Output a Low / Elevated / High / Severe band, a confidence level, and the top 3 factors.
+If the circuit has too little history, return “Not enough data, here’s general guidance”. That’s your required fallback.
+Restoration engine. This is the most impressive part and uses the most of their data.
+Trace the premise upstream using the topology TXT with networkx.
+For each damaged item on that path: hours = STORMS labor hours × quantity, then apply the travel and nonproductive-time multipliers, then divide by crews.
+Add step restoration: the upstream device gets fixed first, so you may come back before the whole circuit does.
+Run a quick Monte Carlo (randomize damage and crew delays about 1,000 times) to get a P10–P90 range instead of one fake-precise number.
+Return the factors most likely to move the estimate (“the biggest driver is 3 broken poles upstream”).
+Rules engine (plain if/then logic you write down and show)
+Who qualifies for alerts, when to notify (e.g. 24 hrs out for High or above), and which channel (SMS, email, call for declared medical needs).
+Escalation triggers, e.g. a medical-needs customer whose estimate goes past 8 hrs.
+Generates the four required messages: pre-storm, outage confirmed, estimate updated, restored.
+
+Privacy layer: customer profiles are synthetic, and needs like “uses medical equipment” are only ever declared by the user, never guessed. Hospitals and fire stations are blurred to a rough area. Add a filter that strips internal fields before anything reaches the AI, and keep an audit log of what the model saw.
+
+Suggested stack
+Backend: Python, FastAPI, geopandas (for the shapefiles), networkx (topology), and scikit-learn or LightGBM.
+Frontend: React with MapLibre or Leaflet for the map, plus a chat panel. If your team is mostly Python, use Streamlit to move faster.
+AI: Claude API with tool use, where the tools are get_risk, estimate_restoration, get_alert_plan and draft_message.
+Splitting the work (4 people)
+Data: load the shapefiles and spreadsheets and build the circuit-level feature table.
+Models: risk score plus the restoration and Monte Carlo engine.
+Frontend: map, storm card and sliders.
+AI + rules: tool calling, alert rules, message templates, privacy filter, demo script.
+Demo story (3 minutes)
+A storm is coming, and the customer clicks their house: “High risk, medium confidence, because your circuit had pole damage in 4 of 6 past storms.”
+A judge drags “crews available” down, and the range goes from 10–18 hrs to 16–30 hrs.
+The customer marks themselves as a medical-equipment user, so the prep list changes, escalation triggers, and an SMS draft appears.
+They ask about a circuit with no data, and it falls back gracefully.
+
+Since the brief says the data package “may vary,” start with a small fake dataset in the same format. That way the frontend and AI work can begin before the real data shows up.
