@@ -15,7 +15,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 
-from . import backtest, replay, rules, service, sms, views
+from . import agent, backtest, replay, rules, safety, service, sms, views
 from .config import ROOT
 from .data import get_dataset
 from .factcard import recent_audit
@@ -141,6 +141,46 @@ def get_view_replay(premise_id: str, crews: int | None = None, extra_poles: int 
 @app.get("/api/backtest/cases")
 def get_backtest_cases(calibrated: bool = True):
     return backtest.test_cases(calibrated)
+
+
+# ---------- AI concierge chat ----------
+
+class Chat(BaseModel):
+    premise_id: str
+    message: str
+    conversation_id: str
+    t: float = -18.0  # storm hour on the web view's clock (negative = before the storm)
+    crews: int | None = None
+    extra_poles: int = 0
+    access: float = 1.0
+
+
+@app.get("/api/chat/status")
+def chat_status():
+    if not agent.available():
+        mode = "keyword"
+    elif os.environ.get("CONCIERGE_FAKE_CLAUDE"):
+        mode = "simulated"
+    else:
+        mode = "ai"
+    return {"mode": mode, "model": agent.MODEL if mode == "ai" else None}
+
+
+@app.post("/api/chat")
+def chat(m: Chat):
+    c = _customer(m.premise_id)
+    text = m.message.strip()[:600]
+    gate = safety.check(text)
+    if gate.kind != "ok":
+        audit_who = "web-" + m.conversation_id[:8]
+        from .factcard import audit
+        audit("danger_escalation" if gate.kind == "danger" else "guardrail", audit_who, {"category": gate.category})
+        return {"text": gate.reply, "source": "safety_gate", "gate": gate.kind, "category": gate.category, "steps": []}
+    what_if = {k: v for k, v in {"crews": m.crews, "extra_poles": m.extra_poles,
+                                 "access": m.access if m.access != 1.0 else None}.items() if v}
+    world = service.World("pre_storm" if m.t < 0 else "outage", max(m.t, 0.0), what_if)
+    ctx = agent.ChatContext(c, world, channel="web", who="web-" + m.conversation_id[:8])
+    return agent.answer("web-" + m.conversation_id + "-" + m.premise_id, text, ctx)
 
 
 # ---------- demo controls (storm clock + what-ifs) ----------

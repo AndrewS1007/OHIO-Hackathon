@@ -10,7 +10,7 @@ from __future__ import annotations
 import copy
 import re
 
-from . import safety
+from . import agent, safety
 from .data import get_dataset
 from .factcard import audit
 from .narrate import sms_segments
@@ -91,6 +91,12 @@ def handle(phone: str, body: str) -> dict:
         audit("still_out_report", who(phone), {})
         return _reply("Thanks for telling us. Your home may have damage of its own. We've opened a ticket and will text you a new estimate.", escalated_to_human=True)
 
+    # Free-form questions (more than a few words) go to the AI concierge when it's on.
+    # One-word commands and short questions stay on the fast, predictable keyword path.
+    if len(body.split()) > 5 and agent.available() and not s.battery_mode:
+        r = agent.answer(who(phone), body, agent.ChatContext(c, WORLD, channel="sms", who=who(phone)))
+        return _reply(r["text"], source=r["source"], kind="ai", tools=[x["tool"] for x in r["steps"]])
+
     kind = None
     if cmd in ("WHY", "WHY?"):
         kind = "why"
@@ -103,6 +109,9 @@ def handle(phone: str, body: str) -> dict:
     elif cmd in ("WHEN", "STATUS") or re.search(r"\b(when|how long|back on|restor|eta|lose power|risk|will i|outage)\b", body, re.I):
         kind = "status"
     if kind is None:
+        if agent.available():
+            r = agent.answer(who(phone), body, agent.ChatContext(c, WORLD, channel="sms", who=who(phone)))
+            return _reply(r["text"], source=r["source"], kind="ai", tools=[x["tool"] for x in r["steps"]])
         return _reply("Sorry, I didn't get that. " + MENU)
 
     if kind == "status":
