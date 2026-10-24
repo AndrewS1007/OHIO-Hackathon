@@ -150,7 +150,11 @@ def test_web_view_endpoints():
     assert late > [s for s in base["steps"] if s["t"] == 7][0]["p50"]  # fewer crews -> later
     raw = c.get("/api/backtest/cases?calibrated=false").json()
     cal = c.get("/api/backtest/cases").json()
-    assert sum(x["inside"] for x in cal) > sum(x["inside"] for x in raw)
+    assert len(raw) == len(cal) > 0
+    bt = c.get("/api/backtest").json()  # the app uses whichever version lands closer to 80%
+    chosen = bt["calibrated_on_test"] if bt["uses_calibration"] else bt["raw_on_test"]
+    other = bt["raw_on_test"] if bt["uses_calibration"] else bt["calibrated_on_test"]
+    assert abs(chosen["coverage"] - 0.8) <= abs(other["coverage"] - 0.8)
 
 
 # ---------- AI concierge ----------

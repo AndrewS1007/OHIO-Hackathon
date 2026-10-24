@@ -48,7 +48,7 @@ def alert_plan(customer: dict, risk: dict, restoration: dict | None = None, batt
             if bh is not None and bh < p90:
                 plan["escalations"].append({
                     "rule": "R4", "action": "check_in_call", "need": n["need"],
-                    "why": f"Your {n['need']} battery ({bh} h) may run out before power is back (up to {p90:g} h)",
+                    "why": f"Your {n['need']} battery ({bh} h) may run out before power is back (it could be out up to about {round(p90)} h)",
                 })
         if needs and p90 > 8:
             plan["escalations"].append({"rule": "R5", "action": "human_outreach", "why": "Medical need with a long possible outage"})
@@ -79,6 +79,12 @@ def should_send_update(prev: dict | None, new: dict, customer: dict, outage_star
             if before != after:
                 return True, f"range crossed the {n['need']} battery limit"
     return False, "no meaningful change"
+
+
+def vague_move_is_big(prev: dict, new: dict) -> bool:
+    """With no concrete reason to point to, only text if the likely time moved by a quarter of the window."""
+    h = new["hours_from_now"]
+    return abs(_abs(prev, "p50") - _abs(new, "p50")) >= max(2.0, 0.25 * (h["p90"] - h["p10"]))
 
 
 def allowed_in_battery_mode(kind: str) -> bool:

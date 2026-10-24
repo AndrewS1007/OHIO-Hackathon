@@ -48,7 +48,12 @@ def web_view():
 @app.get("/api")
 def index():
     ds = get_dataset()
+    from .config import DATA_DIR, REAL_DIR
+    ev = ds.current_storm.get("replay_of_event")
+    replay_row = ds.storms.loc[ds.storms.event_id == ev]
     return {"service": "AI Outage Concierge", "phase": service.WORLD.phase, "storm": ds.current_storm,
+            "data_source": "real" if DATA_DIR.resolve() == REAL_DIR.resolve() else "demo",
+            "replay_storm": {"name": replay_row["name"].iloc[0], "date": str(replay_row.start_time.iloc[0].date())} if len(replay_row) else None,
             "demo_premises": {c["name"]: c["premise_id"] for c in ds.customers}}
 
 
@@ -102,7 +107,7 @@ def get_backtest():
 def get_replay(event_id: str, premise_id: str, crews: int | None = None, extra_poles: int = 0):
     c = _customer(premise_id)
     what_if = {k: v for k, v in {"crews": crews, "extra_poles": extra_poles}.items() if v}
-    tl = replay.timeline(premise_id, event_id, customer=c, what_if=what_if or None, calib=backtest.calibration())
+    tl = replay.timeline(premise_id, event_id, customer=c, what_if=what_if or None, calib=backtest.live_calibration())
     for e in tl["events"]:
         e.pop("estimate", None)
     return tl

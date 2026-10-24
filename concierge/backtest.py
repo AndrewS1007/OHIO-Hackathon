@@ -10,25 +10,50 @@ We learn how reality compared to our raw P50 on OLDER storms (calibration set)
 and score the corrected ranges on NEWER storms we didn't learn from (test set).
 The honesty score we show customers is the test-set number.
 
+Cases are cached to disk in .cache/ (~2 min to compute on the real data). The cache key
+includes the engine's source code, so changing the model recomputes it.
+
 Run:  python -m concierge.backtest
 """
 from __future__ import annotations
 
+import hashlib
 from functools import lru_cache
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
+from .config import ROOT
 from .data import Dataset, get_dataset
 from .replay import actual_restore_h, event_records, scenario_at
 from .restoration import apply_calibration, estimate, prestorm_scenario
 
 CALIB_SHARE = 0.6  # oldest 60% of storms for calibration, newest 40% for testing
+CACHE_DIR = ROOT / ".cache"
+ENGINE_FILES = ("backtest.py", "delays.py", "replay.py", "restoration.py", "risk.py")
+
+
+def _fingerprint(ds: Dataset, n_sims: int) -> str:
+    h = hashlib.sha1(f"{n_sims}|{len(ds.damage)}|{len(ds.paths)}|{len(ds.storms)}|{ds.labor_hours}|{ds.indirect}".encode())
+    for f in ENGINE_FILES:
+        h.update((Path(__file__).parent / f).read_bytes())
+    return h.hexdigest()[:12]
 
 
 @lru_cache(maxsize=4)
 def cases(n_sims: int = 300, ds: Dataset | None = None) -> pd.DataFrame:
     ds = ds or get_dataset()
+    path = CACHE_DIR / f"backtest_cases_{_fingerprint(ds, n_sims)}.csv"
+    if path.exists():
+        return pd.read_csv(path, dtype={"event_id": str, "circuit_id": str})
+    df = _compute_cases(n_sims, ds)
+    CACHE_DIR.mkdir(exist_ok=True)
+    df.to_csv(path, index=False)
+    return df
+
+
+def _compute_cases(n_sims: int, ds: Dataset) -> pd.DataFrame:
     reps = {}
     for p, path in ds.paths.items():
         reps.setdefault(tuple(path[:-1]), p)  # one premise per fuse path
@@ -113,6 +138,11 @@ def calibration(ds: Dataset | None = None) -> dict:
     return cal if cal_w <= MAX_WIDTH_GROWTH * max(raw_w, 1.0) else {}
 
 
+def live_calibration(ds: Dataset | None = None) -> dict | None:
+    """What the live app applies: the calibration, or None for raw ranges."""
+    return calibration(ds or get_dataset()) or None
+
+
 @lru_cache(maxsize=1)
 def run(ds: Dataset | None = None) -> dict:
     ds = ds or get_dataset()
@@ -122,7 +152,19 @@ def run(ds: Dataset | None = None) -> dict:
     test = df[df.event_id.isin(test_evs)]
     scored = _score(test, cal)
     per_circuit = scored.groupby("circuit_id").agg(cases=("inside", "size"), inside=("inside", "sum")).reset_index()
+    names = ds.storms.set_index("event_id")
+    per_storm = []
+    for ev, part in test.groupby("event_id", sort=False):  # newest storms: the ones calibration never saw
+        per_storm.append({
+            "event_id": ev, "storm": names.loc[ev, "name"], "date": str(pd.Timestamp(names.loc[ev, "start_time"]).date()),
+            "damage_reports": int((ds.damage.event_id == ev).sum()),
+            "raw": _summary(_score(part, None)), "calibrated": _summary(_score(part, cal)), "thin_history": False,
+        })
+    per_storm.sort(key=lambda r: -r["damage_reports"])
     return {
+        "method": "restoration delays learned leaving each storm out; calibration on older storms, scored on newer",
+        "uses_calibration": bool(cal),
+        "per_storm": per_storm,
         "calibration_storms": calib_evs,
         "test_storms": test_evs,
         "raw_on_test": _summary(_score(test, None)),

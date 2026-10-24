@@ -227,6 +227,7 @@ Stretch: multilingual messages, safe customer damage reporting.
 
   We now rarely promise too early, but we lean pessimistic and the ranges are wide. Large storms have only 2–3 examples to learn from, and the timestamps are dates, not times. The app still applies calibration because it passes the "at most doubles the width" rule on the older storms. On Feb 2025 it doesn't: Maria's first range becomes 71–292 h.
 - **Risk model:** within a storm, ranking areas by risk scores AUC 0.59 from line history and design alone (0.65 with storm size). Only Feb 2025 has enough damage to score reliably. A leak in the history feature (it used later storms) is fixed.
+- **Alternative model (Filip, not merged):** commits `d718e3f` and `e49d64e` learn report-to-work-start waits per storm size instead (plus a size-aware leave-one-storm-out calibration). His notes report 81% raw coverage (9% too optimistic) on the real data. We kept the `delays.py` model on Oct 24; his version is in the git history if we want to compare or switch.
 - **Speed:** estimate ~1 s, full replay ~16 s, risk model training ~19 s, backtest ~100 s (both cached at startup). The backtest should be cached to disk before the demo.
 - **Local chatbot (`outage-concierge`, first test on this laptop, CPU only, 8 cores, other jobs running):**
   - It called the status tool for "when is my power back?" and then answered using only the fact card's times and range. Good.

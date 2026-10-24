@@ -58,7 +58,9 @@ def fmt_clock(dt: datetime, now: datetime) -> str:
     return s if dt.date() == now.date() else f"{dt.strftime('%a')} {s}"
 
 
-def _conf(h: dict) -> str:
+def _conf(h: dict, est: dict | None = None) -> str:
+    if est and est.get("calibration", {}).get("thin_history"):
+        return "low"  # we haven't seen enough storms this size to trust the range
     spread = (h["p90"] - h["p10"]) / max(h["p50"], 1)
     return "high" if spread < 1.0 else "medium" if spread < 2.0 else "low"
 
@@ -72,7 +74,7 @@ def risk_for(customer: dict, ds: Dataset | None = None) -> dict:
 def restoration_for(customer: dict, world: World = WORLD, ds: Dataset | None = None):
     ds = ds or get_dataset()
     pid = customer["premise_id"]
-    calib = backtest.calibration(ds)
+    calib = backtest.live_calibration(ds)
     if world.phase == "pre_storm":
         # The demo forecast replays a past storm, so that storm must not inform its own forecast.
         sc = prestorm_scenario(pid, ds.current_storm, ds, exclude=(ds.current_storm["replay_of_event"],))
@@ -136,10 +138,12 @@ def make_card(kind: str, customer: dict, world: World = WORLD, extra: dict | Non
             "window": f"{fmt_clock(now + timedelta(hours=h['p10']), now)}-{fmt_clock(now + timedelta(hours=h['p90']), now)}",
             "likely": fmt_clock(now + timedelta(hours=h["p50"]), now),
             "hours_range": f"{round(h['p10'])}-{round(h['p90'])} hrs",
-            "confidence": _conf(h),
+            "confidence": _conf(h, est),
             "drivers": est["drivers"],
             "step_restoration": est["step_restoration"],
         }
+        if est.get("calibration", {}).get("thin_history"):
+            raw["restoration"]["note"] = "We haven't seen many storms this big, so this range is less certain than usual."
         if est["step_restoration"] and est.get("upstream_fixed_p50") is not None:
             raw["restoration"]["upstream_first_by"] = fmt_clock(now + timedelta(hours=est["upstream_fixed_p50"]), now)
         p90_total = h["p90"]
@@ -207,7 +211,7 @@ def proactive(session: Session, world: World = WORLD, ds: Dataset | None = None)
     else:
         ok, _ = rules.should_send_update(session.last_sent, est, c, outage_start_h=start)
         reasons = explain_change(session.last_scenario, sc, c["premise_id"], ds) if session.last_scenario else []
-        if ok and (reasons or abs((est["now_h"] + est["hours_from_now"]["p50"]) - (session.last_sent["now_h"] + session.last_sent["hours_from_now"]["p50"])) >= 2):
+        if ok and (reasons or rules.vague_move_is_big(session.last_sent, est)):
             send("estimate_updated", est=est, extra={"reasons_changed": reasons or ["damage assessment is further along"]})
             session.last_sent, session.last_scenario = est, sc
     plan = rules.alert_plan(c, risk_for(c, ds), est, hours_already_out=world.t_h - start)

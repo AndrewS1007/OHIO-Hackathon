@@ -1,6 +1,6 @@
 # Evaluation: real AEP extracts
 
-Generated 2026-10-24 14:35 by `python -m concierge.evaluate`. Every model number is scored on storms the model didn't learn from (leave-one-storm-out).
+Generated 2026-10-24 15:11 by `python -m concierge.evaluate`. Every model number is scored on storms the model didn't learn from (leave-one-storm-out).
 
 ## Headline numbers for slides
 
@@ -11,7 +11,7 @@ Generated 2026-10-24 14:35 by `python -m concierge.evaluate`. Every model number
 - **Safety:** 87% of danger texts got the 911 message with no AI involved; 100% of normal questions were answered (not refused).
 - **Privacy:** 78 tool calls for 11 customers, **0 ID leaks**, 0 cards blocked by the filter.
 - **Fits a text:** 42% of status texts fit in one SMS; median reading grade 2.7.
-- **Demo storm (Feb 2025 storm):** Maria was out 36.0 h and got 4 texts (5 SMS segments) from outage to restore.
+- **Demo storm (Feb 2025 storm):** Maria was out 36.0 h and got 6 texts (5 SMS segments) from outage to restore.
 
 ## 1. Will I lose power? (risk model)
 
@@ -72,11 +72,11 @@ Per storm (raw model):
 
 ## 4. Speed
 
-- risk prediction s: 0.23
-- prestorm estimate s: 0.6
-- mid storm estimate s: 0.97
-- chatbot tool call: median 0.33 s, p90 0.47 s
-- full storm replay with texts: 14.6 s
+- risk prediction s: 0.12
+- prestorm estimate s: 0.64
+- mid storm estimate s: 0.82
+- chatbot tool call: median 0.27 s, p90 0.42 s
+- full storm replay with texts: 15.0 s
 
 ## Caveats (say these out loud)
 

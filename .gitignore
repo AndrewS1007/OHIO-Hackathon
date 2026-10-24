@@ -8,3 +8,5 @@ logs/
 .claude/
 venv/
 data/real/
+aep_challenge_hack26-main/
+.cache/
