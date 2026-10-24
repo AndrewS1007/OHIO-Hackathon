@@ -216,3 +216,45 @@ def test_chat_endpoint_safety_gate_skips_ai(monkeypatch):
     assert r["source"] == "safety_gate" and "911" in r["text"]
     r = c.post("/api/chat", json={"premise_id": MARIA["premise_id"], "message": "Why is it taking so long?", "conversation_id": "x", "t": 7}).json()
     assert r["source"] == "simulated" and r["grounded"]
+
+
+# ---------- persistence + delivery ----------
+
+def test_sessions_and_thread_survive_restart():
+    from concierge import store
+    sms.handle("+16145550101", "DEMO")
+    sms.handle("+16145550101", "BATTERY 15")
+    service.SESSIONS.clear()  # simulate a process restart
+    service.restore_state()
+    s = service.SESSIONS["+16145550101"]
+    assert s.battery_mode and s.customer["phone"] == "+16145550101"
+    t = store.thread("+16145550101")
+    assert [m["dir"] for m in t] == ["in", "out", "in", "out"]
+
+
+def test_stop_sticks_after_restart():
+    sms.handle("+16145550102", "DEMO")
+    sms.handle("+16145550102", "STOP")
+    service.SESSIONS.clear()
+    service.restore_state()
+    assert service.SESSIONS["+16145550102"].customer["alerts_opt_in"] is False
+
+
+def test_proactive_alerts_are_delivered_once_and_threaded():
+    from concierge import store
+    sms.handle("+16145550103", "DEMO")
+    service.advance(40)
+    out = [m for m in store.thread("+16145550103") if m["kind"] in ("outage_confirmed", "restored", "estimate_updated")]
+    assert out and all(m["status"] == "dry_run" for m in out)
+    service.SESSIONS.clear()
+    service.restore_state()
+    n = len(store.thread("+16145550103"))
+    service.advance(40)  # already announced: a restart must not resend
+    assert len(store.thread("+16145550103")) == n
+
+
+def test_thread_endpoint():
+    client = TestClient(app)
+    client.post("/api/sms/simulate", json={"phone": "+16145550104", "body": "DEMO"})
+    t = client.get("/api/sms/thread/+16145550104").json()
+    assert t[0]["dir"] == "in" and t[0]["text"] == "DEMO"

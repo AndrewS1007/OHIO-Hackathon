@@ -7,7 +7,7 @@ import hashlib
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
-from . import backtest, prep, rules
+from . import backtest, outbound, prep, rules, store
 from .data import Dataset, get_dataset
 from .factcard import audit, build
 from .narrate import render
@@ -74,7 +74,8 @@ def restoration_for(customer: dict, world: World = WORLD, ds: Dataset | None = N
     pid = customer["premise_id"]
     calib = backtest.calibration(ds)
     if world.phase == "pre_storm":
-        sc = prestorm_scenario(pid, ds.current_storm, ds)
+        # The demo forecast replays a past storm, so that storm must not inform its own forecast.
+        sc = prestorm_scenario(pid, ds.current_storm, ds, exclude=(ds.current_storm["replay_of_event"],))
         if world.what_if.get("crews"):
             sc.crews = int(world.what_if["crews"])
         sc.access = float(world.what_if.get("access", 1.0))
@@ -231,10 +232,46 @@ def advance(to_h: float, world: World = WORLD) -> dict[str, list[dict]]:
             if msgs:
                 sent.setdefault(phone, []).extend({**m, "at": fmt_clock(world.now(ds), world.now(ds))} for m in msgs)
     world.t_h = to_h
-    return sent
+    return deliver(sent)
 
 
 def reset_world():
     global WORLD
     WORLD.phase, WORLD.t_h, WORLD.what_if = "pre_storm", 0.0, {}
     SESSIONS.clear()
+    store.clear()
+
+
+# ---------- persistence + delivery ----------
+
+def persist(phone: str | None = None) -> None:
+    """Save the storm clock and one session (or all of them) so a restart loses nothing."""
+    store.save_world(WORLD)
+    for p in ([phone] if phone else list(SESSIONS)):
+        if p in SESSIONS:
+            store.save_session(p, SESSIONS[p])
+
+
+def restore_state() -> None:
+    """Reload linked customers and the storm clock saved before the last shutdown."""
+    w = store.load_world()
+    if w:
+        WORLD.phase, WORLD.t_h, WORLD.what_if = w["phase"], w["t_h"], w["what_if"]
+    SESSIONS.update(store.load_sessions(Session))
+
+
+def deliver(sent: dict[str, list[dict]]) -> dict[str, list[dict]]:
+    """Text each proactive message to its customer (a dry run unless Twilio is configured),
+    record it in their thread, and save the sessions that produced it."""
+    for phone, msgs in sent.items():
+        for m in msgs:
+            if m.get("text"):  # escalations are staff actions, not customer texts
+                m["delivery"] = outbound.send(phone, m["text"])
+                store.log_message(phone, "out", m["text"], m.get("kind"), m["delivery"])
+    persist()
+    return sent
+
+
+def broadcast(world: World = WORLD) -> dict[str, list[dict]]:
+    """Run proactive alerts for every session, deliver them, and return what went out."""
+    return deliver({p: proactive(s, world) for p, s in list(SESSIONS.items())})

@@ -82,10 +82,18 @@ unzip -n data/raw/matched_upstream.zip -d data/extracted/matched_upstream && cd 
 
 Once `data/real/` exists, the app uses it. Set `CONCIERGE_DATA_DIR=data/mock` to go back to the fake data (the unit tests always use it). Every assumption the converter makes is listed in `data/real/conversion_report.json` and in [PLAN.md](PLAN.md#real-data-what-we-found-oct-24).
 
+## Evaluation (numbers for the presentation)
+
+```bash
+.venv/bin/python -m concierge.evaluate      # ~5 min on real data
+```
+
+Writes `reports/EVALUATION.md` (headline numbers and tables), `reports/evaluation.json` (every number) and CSVs for charts. Every model number is scored leave-one-storm-out: each storm is predicted by a model that never saw it. It covers risk accuracy (AUC, Brier skill, reliability by band), restoration ranges (coverage, too optimistic/pessimistic, error, width, against a no-model baseline and several calibrations), privacy (ID leaks across every chatbot tool), SMS length and reading level, the safety gate, and speed.
+
 ## Local chatbot model (Ollama)
 
 ```bash
-ollama pull llama3.1
+ollama pull qwen2.5:3b
 ollama create outage-concierge -f Modelfile
 ollama run outage-concierge "can you check my neighbor's power?"
 ```

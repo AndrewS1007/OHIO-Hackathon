@@ -10,11 +10,11 @@ from __future__ import annotations
 import copy
 import re
 
-from . import agent, safety
+from . import agent, safety, store
 from .data import get_dataset
 from .factcard import audit
 from .narrate import sms_segments
-from .service import SESSIONS, WORLD, Session, is_out, message, who
+from .service import SESSIONS, WORLD, Session, is_out, message, persist, who
 
 MENU = "Text WHEN, WHY, PLAN, ALERTS, WORSE (safety) or HELP (a person)."
 
@@ -43,6 +43,15 @@ def _link(phone: str, body: str) -> Session | None:
 
 
 def handle(phone: str, body: str) -> dict:
+    """Entry point for every inbound text (Twilio and the simulator): records the thread and saves state."""
+    store.log_message(phone, "in", body)
+    r = _handle(phone, body)
+    store.log_message(phone, "out", r["text"], r.get("kind"))
+    persist(phone)
+    return r
+
+
+def _handle(phone: str, body: str) -> dict:
     audit("inbound_sms", who(phone), {"chars": len(body)})  # don't log message text: it may hold personal info
     gate = safety.check(body)
     if gate.kind == "danger":

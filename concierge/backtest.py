@@ -53,7 +53,7 @@ def cases(n_sims: int = 300, ds: Dataset | None = None) -> pd.DataFrame:
             actual = actual_restore_h(ds, premise, recs)
             if actual <= t:
                 continue
-            base = prestorm_scenario(premise, {"max_wind_mph": wind}, ds).hidden_lambda
+            base = prestorm_scenario(premise, {"max_wind_mph": wind}, ds, exclude=(ev,)).hidden_lambda
             sc = scenario_at(ds, premise, ev, t, None, recs, base)
             est = estimate(premise, sc, n_sims=n_sims, seed=len(rows), ds=ds)
             if est["status"] != "ok":
@@ -96,13 +96,21 @@ def _summary(df: pd.DataFrame) -> dict:
     }
 
 
+MAX_WIDTH_GROWTH = 2.0  # a range more than twice as wide isn't one people can plan around
+
+
 @lru_cache(maxsize=1)
 def calibration(ds: Dataset | None = None) -> dict:
-    """Calibration learned from the older storms only."""
+    """Calibration learned from the older storms only, or {} (use raw ranges) if it would
+    more than double the range width on those storms."""
     ds = ds or get_dataset()
     df = cases(ds=ds)
     calib_evs, _ = _split(ds)
-    return fit_calibration(df[df.event_id.isin(calib_evs)])
+    train = df[df.event_id.isin(calib_evs)]
+    cal = fit_calibration(train)
+    raw_w = _summary(_score(train, None))["median_range_width_h"]
+    cal_w = _summary(_score(train, cal))["median_range_width_h"]
+    return cal if cal_w <= MAX_WIDTH_GROWTH * max(raw_w, 1.0) else {}
 
 
 @lru_cache(maxsize=1)
@@ -123,6 +131,7 @@ def run(ds: Dataset | None = None) -> dict:
         "per_circuit": [{**r, "inside": int(r["inside"]), "cases": int(r["cases"])} for r in per_circuit.to_dict("records")],
         "target_coverage": 0.8,
         "calibration": {k: round(v, 3) for k, v in cal.items()},
+        "calibration_used": bool(cal),
     }
 
 

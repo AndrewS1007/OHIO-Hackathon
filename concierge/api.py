@@ -15,7 +15,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 
-from . import agent, backtest, replay, rules, safety, service, sms, views
+from . import agent, backtest, replay, rules, safety, service, sms, store, views
 from .config import ROOT
 from .data import get_dataset
 from .factcard import recent_audit
@@ -29,6 +29,7 @@ def warm_up():
     """Run the backtest and risk map once at startup so the first page load is fast."""
     backtest.run()
     views.risk_map_with_outages()
+    service.restore_state()
 
 
 def _customer(premise_id: str) -> dict:
@@ -163,7 +164,7 @@ def chat_status():
         mode = "simulated"
     else:
         mode = "ai"
-    return {"mode": mode, "model": agent.MODEL if mode == "ai" else None}
+    return {"mode": mode, "backend": agent.backend(), "model": agent.model_name() if mode == "ai" else None}
 
 
 @app.post("/api/chat")
@@ -209,7 +210,7 @@ def demo_reset():
 
 @app.post("/api/demo/prestorm_alerts")
 def demo_prestorm():
-    return {p: service.proactive(s) for p, s in service.SESSIONS.items()}
+    return service.broadcast()
 
 
 @app.post("/api/demo/advance")
@@ -220,7 +221,7 @@ def demo_advance(a: Advance):
 @app.post("/api/demo/what_if")
 def demo_what_if(w: WhatIf):
     service.WORLD.what_if.update({k: v for k, v in w.model_dump().items() if v is not None})
-    return {p: service.proactive(s) for p, s in service.SESSIONS.items()}
+    return service.broadcast()
 
 
 # ---------- SMS / voice ----------
@@ -233,6 +234,12 @@ class SimSMS(BaseModel):
 @app.post("/api/sms/simulate")
 def sms_simulate(m: SimSMS):
     return sms.handle(m.phone, m.body)
+
+
+@app.get("/api/sms/thread/{phone}")
+def sms_thread(phone: str, limit: int = 200):
+    """The saved conversation (both directions, proactive alerts included) for the phone panel."""
+    return store.thread(phone, min(limit, 500))
 
 
 def _twilio_ok(request: Request, form: dict) -> bool:

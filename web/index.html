@@ -324,7 +324,7 @@ async function init() {
   $("t").oninput = () => { stopPlay(); S.t = +$("t").value; renderTime(); };
   $("play").onclick = togglePlay;
   $("ask").onsubmit = e => { e.preventDefault(); sendChat($("ask-in").value); };
-  api("/api/chat/status").then(st => { $("ai-mode").textContent = { ai: "AI on", simulated: "Simulated AI", keyword: "Keyword mode" }[st.mode]; $("ai-mode").title = st.mode === "ai" ? "Answers by " + st.model : st.mode === "simulated" ? "Stand-in for Claude (no API key)" : "Set ANTHROPIC_API_KEY to turn on the AI"; });
+  api("/api/chat/status").then(st => { $("ai-mode").textContent = { ai: "AI on", simulated: "Simulated AI", keyword: "Keyword mode" }[st.mode]; $("ai-mode").title = st.mode === "ai" ? "Answers by " + st.model : st.mode === "simulated" ? "Stand-in for Claude (no API key)" : "Start Ollama with the outage-concierge model (or set ANTHROPIC_API_KEY) to turn on the AI"; });
   window.addEventListener("resize", () => { renderCone(); renderMap(); renderStrip(); });
   await selectPersona(personas[0]);
   loadStrip();

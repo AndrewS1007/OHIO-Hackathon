@@ -1,4 +1,4 @@
-"""The AI concierge: Claude answers free-form questions by calling our engines.
+"""The AI concierge: an LLM answers free-form questions by calling our engines.
 
 How it stays trustworthy:
   - The safety gate runs BEFORE this (danger words never reach the AI).
@@ -7,15 +7,19 @@ How it stays trustworthy:
   - Grounding check: every number in Claude's reply must appear in a tool
     result (or in the customer's own message). Otherwise we discard the reply
     and send a safe template answer instead.
-  - No API key, a network error, or a refusal -> the keyword bot answers instead.
+  - No model reachable, a network error, or a refusal -> the keyword bot answers instead.
 
-Turn it on with ANTHROPIC_API_KEY (or an `ant auth login` profile). Set
-CONCIERGE_AI=0 to force keyword mode.
+Backends (CONCIERGE_AI picks one; default "auto"):
+  ollama  the local `outage-concierge` model from our Modelfile (OLLAMA_URL, OLLAMA_MODEL)
+  claude  the Anthropic API (ANTHROPIC_API_KEY or an `ant auth login` profile)
+  auto    Ollama if it's running with our model, else Claude if credentials exist
+  0       keyword mode only
 """
 from __future__ import annotations
 
 import json
 import os
+import time
 from dataclasses import dataclass, field
 
 from . import service
@@ -23,6 +27,9 @@ from .factcard import audit
 from .narrate import numbers_grounded, numbers_in
 
 MODEL = "claude-opus-5-5"
+OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434").rstrip("/")
+OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "outage-concierge")
+OLLAMA_TIMEOUT = float(os.environ.get("OLLAMA_TIMEOUT", "240"))  # CPU-only laptops take a while per round
 MAX_TOOL_ROUNDS = 5
 MAX_HISTORY_MESSAGES = 24  # start a fresh conversation after this, rather than editing old turns
 
@@ -161,12 +168,52 @@ def run_tool(name: str, args: dict, ctx: ChatContext) -> dict:
 
 # ---------- the loop ----------
 
-def available() -> bool:
-    if os.environ.get("CONCIERGE_AI") == "0":
-        return False
+_ollama_seen: tuple[float, bool] = (0.0, False)
+
+
+def ollama_ready() -> bool:
+    """Is Ollama running with our model? Cached for 30 s so the chat stays fast."""
+    global _ollama_seen
+    if time.monotonic() - _ollama_seen[0] < 30:
+        return _ollama_seen[1]
+    try:
+        import httpx
+        names = {m["name"] for m in httpx.get(f"{OLLAMA_URL}/api/tags", timeout=2).json().get("models", [])}
+        ok = OLLAMA_MODEL in names or f"{OLLAMA_MODEL}:latest" in names
+    except Exception:
+        ok = False
+    _ollama_seen = (time.monotonic(), ok)
+    return ok
+
+
+def _claude_ready() -> bool:
     if os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN") or os.environ.get("CONCIERGE_FAKE_CLAUDE"):
         return True
     return os.path.isdir(os.path.expanduser("~/.config/anthropic"))  # `ant auth login` profile
+
+
+def backend() -> str | None:
+    """"ollama", "claude", or None (keyword mode)."""
+    choice = os.environ.get("CONCIERGE_AI", "auto").lower()
+    if choice == "0":
+        return None
+    if os.environ.get("CONCIERGE_FAKE_CLAUDE"):
+        return "claude"
+    if choice == "ollama":
+        return "ollama" if ollama_ready() else None
+    if choice == "claude":
+        return "claude" if _claude_ready() else None
+    if ollama_ready():
+        return "ollama"
+    return "claude" if _claude_ready() else None
+
+
+def model_name() -> str | None:
+    return {"ollama": OLLAMA_MODEL, "claude": MODEL}.get(backend())
+
+
+def available() -> bool:
+    return backend() is not None
 
 
 def _client():
@@ -181,17 +228,68 @@ def _text(content) -> str:
     return "".join(getattr(b, "text", "") for b in content if getattr(b, "type", "") == "text").strip()
 
 
+OLLAMA_TOOLS = [{"type": "function", "function": {"name": t["name"], "description": t["description"],
+                                                 "parameters": t["input_schema"]}} for t in TOOLS]
+
+
+def _ollama_chat(messages: list) -> dict:
+    import httpx
+    r = httpx.post(f"{OLLAMA_URL}/api/chat", timeout=OLLAMA_TIMEOUT, json={
+        "model": OLLAMA_MODEL, "messages": messages, "tools": OLLAMA_TOOLS,
+        "stream": False, "keep_alive": "30m"})
+    r.raise_for_status()
+    return r.json()["message"]
+
+
+def _ask_ollama(conv: Conversation, ctx: ChatContext, steps: list, tool_outputs: list) -> str:
+    """Tool loop against the local model. Its rules live in the Modelfile's SYSTEM.
+
+    Almost every question starts with get_outage_status, so we run it up front and hand the
+    model its result: one model call instead of two, which matters on a CPU-only laptop."""
+    status = run_tool("get_outage_status", {}, ctx)
+    tool_outputs.append(status)
+    steps.append({"tool": "get_outage_status", "label": TOOL_LABELS["get_outage_status"], "input": {}, "result": status})
+    conv.messages += [
+        {"role": "assistant", "content": "", "tool_calls": [{"function": {"name": "get_outage_status", "arguments": {}}}]},
+        {"role": "tool", "tool_name": "get_outage_status", "content": json.dumps(status, ensure_ascii=False)},
+    ]
+    for _ in range(MAX_TOOL_ROUNDS + 1):
+        msg = _ollama_chat(conv.messages)
+        calls = msg.get("tool_calls") or []
+        conv.messages.append({"role": "assistant", "content": msg.get("content", ""),
+                              **({"tool_calls": calls} if calls else {})})
+        if not calls:
+            return (msg.get("content") or "").strip()
+        for call in calls:
+            name, args = call["function"]["name"], call["function"].get("arguments") or {}
+            if isinstance(args, str):
+                args = json.loads(args or "{}")
+            try:
+                out = run_tool(name, args, ctx)
+                tool_outputs.append(out)
+                steps.append({"tool": name, "label": TOOL_LABELS.get(name, name), "input": args, "result": out})
+                content = json.dumps(out, ensure_ascii=False)
+            except Exception as e:  # tell the model, don't crash the chat
+                content = f"Error: {e}"
+            conv.messages.append({"role": "tool", "tool_name": name, "content": content})
+    raise RuntimeError("too many tool rounds")
+
+
 def ask(conversation_id: str, user_text: str, ctx: ChatContext, client=None) -> dict:
     """Answer one customer message. Returns {text, source, steps, grounded}."""
-    conv = CONVERSATIONS.setdefault(conversation_id, Conversation())
+    use_ollama = client is None and backend() == "ollama"
+    conv = CONVERSATIONS.setdefault(("ollama:" if use_ollama else "") + conversation_id, Conversation())
     if len(conv.messages) > MAX_HISTORY_MESSAGES:
         conv.messages = []  # fresh start; never trim or edit earlier turns
     max_chars = 300 if ctx.channel == "sms" else 600
-    client = client or _client()
     turn_start = len(conv.messages)
     conv.messages.append({"role": "user", "content": user_text})
     steps, tool_outputs = [], []
     try:
+        if use_ollama:
+            text = _ask_ollama(conv, ctx, steps, tool_outputs)
+            return _finish(text, user_text, ctx, steps, tool_outputs, "ai")
+        client = client or _client()
         for _ in range(MAX_TOOL_ROUNDS + 1):
             resp = client.beta.messages.create(
                 model=MODEL,
@@ -223,17 +321,21 @@ def ask(conversation_id: str, user_text: str, ctx: ChatContext, client=None) -> 
             raise RuntimeError("too many tool rounds")
         text = _text(resp.content)
     except Exception as e:
-        audit("ai_fallback", ctx.who, {"reason": type(e).__name__})
+        audit("ai_fallback", ctx.who, {"reason": type(e).__name__, "backend": "ollama" if use_ollama else "claude"})
         del conv.messages[turn_start:]  # this turn never completed; drop it whole
         return {"text": None, "source": "fallback", "steps": steps, "grounded": None, "error": type(e).__name__}
+    return _finish(text, user_text, ctx, steps, tool_outputs,
+                   "simulated" if os.environ.get("CONCIERGE_FAKE_CLAUDE") else "ai")
 
+
+def _finish(text: str, user_text: str, ctx: ChatContext, steps: list, tool_outputs: list, source: str) -> dict:
+    """Grounding check shared by both backends: every number must come from a tool or the customer."""
     evidence = {"tools": tool_outputs, "customer_said": user_text}
     grounded = bool(text) and numbers_grounded(text, evidence)
     audit("ai_answer", ctx.who, {"grounded": grounded, "tools": [s["tool"] for s in steps], "chars": len(text)})
     if not grounded:
         bad = sorted(numbers_in(text) - numbers_in(json.dumps(evidence, ensure_ascii=False)) - {"911", "35"})
         return {"text": None, "source": "rejected", "steps": steps, "grounded": False, "ungrounded_numbers": bad}
-    source = "simulated" if os.environ.get("CONCIERGE_FAKE_CLAUDE") else "ai"
     return {"text": text, "source": source, "steps": steps, "grounded": True}
 
 

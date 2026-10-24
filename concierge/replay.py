@@ -11,6 +11,7 @@ import math
 import pandas as pd
 
 from .data import Dataset, get_dataset
+from .delays import for_event, remaining_damage
 from .restoration import Job, Scenario, default_crews, estimate, explain_change, prestorm_scenario
 from .rules import should_send_update
 
@@ -24,7 +25,7 @@ def event_records(ds: Dataset, event_id: str, circuit_id: str) -> pd.DataFrame:
 
 
 def hidden_lambda(prestorm: float, known: int, t: float) -> float:
-    """Expected damage not found yet: shrinks as reports come in and time passes."""
+    """Expected damage not found yet, without learned delays: shrinks as reports come in and time passes."""
     return max(0.2, prestorm - known) * math.exp(-t / 6)
 
 
@@ -43,12 +44,14 @@ def scenario_at(ds: Dataset, premise_id: str, event_id: str, t: float, what_if: 
         fuse = next(d for d in reversed(ds.path(premise_id)) if ds.device_type(d) in ("FUSE", "SECT", "REC", "BRK"))
         jobs.append(Job(fuse, "pole_replace", int(what_if["extra_poles"]), found_at, source="what_if", incident_id="what_if_poles"))
     # The real ARCOS extract has no crew counts, so fall back to the challenge assumption.
-    crews = int(known.crew_count.iloc[0]) if len(known) and pd.notna(known.crew_count.iloc[0]) else default_crews(storm.max_wind_mph)
-    crews = int(what_if.get("crews", crews))
-    if base_lambda is None:
-        base_lambda = prestorm_scenario(premise_id, {"max_wind_mph": storm.max_wind_mph}, ds).hidden_lambda
+    base_crews = int(known.crew_count.iloc[0]) if len(known) and pd.notna(known.crew_count.iloc[0]) else default_crews(storm.max_wind_mph)
+    crews = int(what_if.get("crews", base_crews))
+    if base_lambda is None:  # never let a storm inform its own forecast
+        base_lambda = prestorm_scenario(premise_id, {"max_wind_mph": storm.max_wind_mph}, ds, exclude=(event_id,)).hidden_lambda
+    # Delays come from the OTHER storms of the same size, so replaying (or backtesting) a storm never peeks at it.
+    d = for_event(ds, event_id)
     return Scenario(crews=crews, access=float(what_if.get("access", 1.0)), now_h=t,
-                    hidden_lambda=hidden_lambda(base_lambda, len(known), t), jobs=jobs)
+                    hidden_lambda=remaining_damage(base_lambda, len(known), d, t), jobs=jobs, delays=d, base_crews=base_crews)
 
 
 def _p50_abs(est: dict) -> float:
@@ -73,7 +76,7 @@ def timeline(premise_id: str, event_id: str, customer: dict | None = None, what_
     out_h = float(on_path.report_h.min())
     back_h = actual_restore_h(ds, premise_id, recs)
     storm = ds.storms.loc[ds.storms.event_id == event_id].iloc[0]
-    base_lambda = prestorm_scenario(premise_id, {"max_wind_mph": storm.max_wind_mph}, ds).hidden_lambda
+    base_lambda = prestorm_scenario(premise_id, {"max_wind_mph": storm.max_wind_mph}, ds, exclude=(event_id,)).hidden_lambda
 
     steps, events = [], []
     prev_sc, prev_est = None, None

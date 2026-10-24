@@ -122,8 +122,10 @@ Example message (grade-6 reading level):
 **Restoration engine** (topology + STORMS + indirect labor)
 - Trace the premise upstream through the topology with networkx.
 - Each damage job: hours = (labor hours × quantity + access adders) × indirect multipliers × access factor. With real data: workbook person-hours × 4.5 ILM ÷ a 4-person crew, plus the workbook's access / backyard / remote-site adders when ARCOS flags them.
-- Crews work jobs upstream-first (critical-facility circuits first); you're back when every job on *your* path is done (step restoration).
-- Monte Carlo (~1,000 runs, randomizing job time, assessment delay, and not-yet-found damage) → P10 / P50 / P90 + the biggest driver.
+- **Delays learned from past storms** (`concierge/delays.py`): when damage gets reported (by storm size; big storms keep reporting damage for days) and how long a repair waits for a crew after its report (pooled across storms). A storm is never used to learn its own delays.
+- Not-yet-reported damage is nowcast: if X% of a storm's damage is usually reported by now, the reports so far imply the total. Fewer or more crews than usual stretch or shrink the learned waits.
+- You're back when every job on *your* path is done (step restoration).
+- Monte Carlo (~1,000 runs) → P10 / P50 / P90 + the biggest driver. Scenarios built without learned delays (unit tests) still use the crew-queue model: crews work jobs upstream-first, critical-facility circuits first.
 
 **Rules engine** (written-down if/then logic we show to judges)
 - Alert eligibility, timing (e.g. 24 hrs out for High or above), and channel (SMS, voice call for declared medical needs).
@@ -149,8 +151,8 @@ The LLM calls the engines as tools: `get_risk`, `estimate_restoration`, `get_ale
 - Backend: Python, FastAPI, networkx, numpy/pandas, scikit-learn; geopandas/pyogrio + openpyxl for the data conversion
 - Messaging: Twilio (SMS + voice)
 - Web view: React with MapLibre or Leaflet, or Streamlit if the team is mostly Python
-- AI narration: local Ollama `llama3.1` (`narrate.py`), with a template fallback when it's off or fails a check
-- AI chatbot: Claude tool use today (`agent.py`); `Modelfile` defines an `outage-concierge` Ollama model with the same rules for running it locally
+- AI narration: local Ollama `qwen2.5:3b` (`narrate.py`), with a template fallback when it's off or fails a check
+- AI chatbot: tool use in `agent.py`, on local Ollama by default with Claude as an option; `Modelfile` builds the `outage-concierge` Ollama model (on `qwen2.5:3b`) with the same rules for running it locally
 
 ## Responsible AI
 
@@ -183,7 +185,9 @@ The LLM calls the engines as tools: `get_risk`, `estimate_restoration`, `get_ale
 - [x] **NEW** Swap fake data for the real extracts (`concierge/realdata.py` → `data/real/`)
 - [x] **NEW** Simulation ~30× faster (vectorized Monte Carlo) so estimates take ~1 s on real circuits
 - [x] **NEW** Ollama `Modelfile` for the chatbot (`outage-concierge`)
-- [ ] Recalibrate the honesty score on real storms (see findings below)
+- [x] **NEW** Tool test suite (`tests/test_tools.py`) and evaluation report (`python -m concierge.evaluate` → `reports/EVALUATION.md`)
+- [x] **NEW** Restoration learns report delays and repair waits from past storms (too optimistic: 75% → 5%)
+- [x] Decided (Oct 24): keep the calibrated ranges in the app (wider, but 0% too optimistic on the test storms)
 - [ ] Rewrite demo beats 4 and the slider around the real Feb 2025 storm
 - [ ] Wire `agent.py` to Ollama, or keep Claude for the chatbot (see latency below)
 - [ ] Add real weather for past storms (NOAA) instead of assumed wind
@@ -211,7 +215,18 @@ Stretch: multilingual messages, safe customer damage reporting.
 **First results on real data.**
 - Maria (synthetic CPAP persona on a real premise, circuit CIR2): High risk (53%, medium confidence). In the Feb 2025 replay her power is out at hour 30 and back at hour 66, with two "here's why" updates in between.
 - Dev lands on a circuit with no damage history, so he gets the fallback, as designed.
-- **The honesty score is bad, and we should say so.** Raw ranges contained the real time 19% of the time (too optimistic). Calibrating on the 2023–24 storms raises coverage to 57%, but the ranges become ~410 h wide. That happens because the calibration storms are small and the test set is the Feb 2025 storm, a different kind of event. Fixes to try, in order: calibrate by storm size (small vs. large); leave-one-storm-out cross-validation instead of a time split; calibrate by hours into the outage.
+- **Honesty score, first version: bad.** Raw ranges contained the real time 19% of the time and were too optimistic 75% of the time, because the model assumed damage is found within hours and repairs take crew-hours. In the real data, big-storm damage keeps being reported for days (median 54 h after the start) and a repair waits a median ~1.5 days.
+- **After learning those delays from past storms** (full numbers in `reports/EVALUATION.md`, every storm scored by a model that never saw it):
+
+  | | Inside range | Too optimistic | Too pessimistic | Median error | Median width |
+  |---|---|---|---|---|---|
+  | Old model | 18% | 75% | 7% | 42 h | 10 h |
+  | **Learned delays (raw)** | **54%** | **5%** | 41% | 48 h | 116 h |
+  | + app's calibration | 66% | 0% | 34% | 163 h | 275 h |
+  | No-model baseline | 46% | 4% | 50% | 48 h | 48 h |
+
+  We now rarely promise too early, but we lean pessimistic and the ranges are wide. Large storms have only 2–3 examples to learn from, and the timestamps are dates, not times. The app still applies calibration because it passes the "at most doubles the width" rule on the older storms. On Feb 2025 it doesn't: Maria's first range becomes 71–292 h.
+- **Risk model:** within a storm, ranking areas by risk scores AUC 0.59 from line history and design alone (0.65 with storm size). Only Feb 2025 has enough damage to score reliably. A leak in the history feature (it used later storms) is fixed.
 - **Speed:** estimate ~1 s, full replay ~16 s, risk model training ~19 s, backtest ~100 s (both cached at startup). The backtest should be cached to disk before the demo.
 - **Local chatbot (`outage-concierge`, first test on this laptop, CPU only, 8 cores, other jobs running):**
   - It called the status tool for "when is my power back?" and then answered using only the fact card's times and range. Good.

@@ -22,8 +22,10 @@ ALLOWED_KEYS = {
     "safety", "is_model_estimate", "hour", "what",
 }
 SENSITIVE = [
-    re.compile(r"\bC\d{2}(-[A-Z]\d?)+\b"),  # device / circuit ids
-    re.compile(r"\bP\d{5}\b"),  # premise ids
+    re.compile(r"\bC\d{2}(-[A-Z]\d?)+\b"),  # device / circuit ids (mock)
+    re.compile(r"\bP\d{5,}\b"),  # premise ids (mock: P12345, real: P166621239)
+    re.compile(r"\b[XFRSBT]\d{6,}\b"),  # real device ids (transformer, fuse, recloser, ...)
+    re.compile(r"\b(CIR|STATION)\d+\b"),  # real circuit / substation names
     re.compile(r"\+?\d[\d\-\s]{9,}\d"),  # phone numbers
     re.compile(r"-?\d{1,3}\.\d{4,}"),  # coordinates
     re.compile(r"\bINC\d+\b"),  # incident ids

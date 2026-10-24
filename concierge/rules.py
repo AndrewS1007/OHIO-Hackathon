@@ -11,7 +11,7 @@ RULES = [
     ("R3", "Channel: SMS by default. A declared medical need adds a voice call. Battery mode keeps only essential texts."),
     ("R4", "Escalate: if a declared device's battery runs out before our P90 restoration time, place a check-in call; no answer in 15 min goes to a human."),
     ("R5", "Escalate: any declared medical need with P90 over 8 h gets human outreach."),
-    ("R6", "Send an 'estimate updated' text when P50 moves by 1 h or more, or the range crosses a declared battery limit."),
+    ("R6", "Send an 'estimate updated' text when P50 moves by 1 h or more and by 15% of the remaining wait, or the range crosses a declared battery limit."),
     ("R7", "When we can't predict reliably, a human reviews the message before it goes out."),
 ]
 
@@ -68,8 +68,9 @@ def should_send_update(prev: dict | None, new: dict, customer: dict, outage_star
         return False, "no estimate"
     if not prev or prev.get("status") != "ok":
         return True, "first estimate"
-    if abs(_abs(prev, "p50") - _abs(new, "p50")) >= 1:
-        return True, "P50 moved by 1 h or more"
+    # 2 h matters when power is due back in 3 h, not when it's due in 3 days: scale with the wait.
+    if abs(_abs(prev, "p50") - _abs(new, "p50")) >= max(1.0, 0.15 * max(new["hours_from_now"]["p50"], 0.0)):
+        return True, "P50 moved by 1 h or more (and 15% of the remaining wait)"
     for n in customer.get("declared_needs", []):
         bh = n.get("battery_hours")
         if bh is not None:

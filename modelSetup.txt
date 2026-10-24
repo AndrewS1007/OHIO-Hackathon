@@ -1,9 +1,10 @@
 # 1. Install Ollama (Linux/WSL)
 curl -fsSL https://ollama.com/install.sh | sh
 
-# 2. Download and start the Llama 3.1 model
-ollama run llama3.1
-# (Wait for it to say "success" and open a prompt. Then press Ctrl+D to exit the chat. The server will stay running in the background!)
+# 2. Download the Qwen 2.5 3B model and build our chatbot model from it
+ollama pull qwen2.5:3b
+ollama create outage-concierge -f Modelfile
+# (Each command prints "success" when done. The Ollama server keeps running in the background.)
 
 # 3. Activate the virtual environment (if not already active)
 source .venv/bin/activate

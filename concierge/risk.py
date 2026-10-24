@@ -20,6 +20,12 @@ from .data import Dataset, get_dataset
 FEATURES = ["max_wind_mph", "ice_in", "overhead_pct", "length_mi", "hist_path_rate"]
 BANDS = [(0.25, "Low"), (0.5, "Elevated"), (0.75, "High"), (1.01, "Severe")]
 MIN_HISTORY = 3  # fewer past storms than this -> fallback
+PRIOR_HITS, PRIOR_STORMS = 0.1, 1.0  # shrink small histories toward ~10% (about the overall damage rate)
+
+
+def history_rate(hits: int, n: int) -> float:
+    """Share of earlier storms that damaged this path, shrunk toward the base rate when n is small."""
+    return (hits + PRIOR_HITS) / (n + PRIOR_STORMS)
 
 
 def band_for(p: float) -> str:
@@ -58,32 +64,45 @@ class RiskModel:
     n_rows: int
 
 
-@lru_cache(maxsize=1)
-def train(ds: Dataset | None = None) -> RiskModel:
-    ds = ds or get_dataset()
+@lru_cache(maxsize=4)
+def training_rows(ds: Dataset) -> pd.DataFrame:
+    """One row per (feeder path, past storm): features, and whether that path was damaged."""
     circ = ds.circuits.set_index("circuit_id")
     storms = ds.storms.set_index("event_id")
     rows = []
     # One representative premise per fuse = one row per distinct feeder path.
-    reps = {}
+    reps, customers = {}, {}
     for p, path in ds.paths.items():
-        reps.setdefault(tuple(path[:-1]), p)
+        key = tuple(path[:-1])
+        reps.setdefault(key, p)
+        customers[key] = customers.get(key, 0) + 1
     for path_key, premise in reps.items():
         cid = ds.circuit_of(premise)
         hist = _history_events(ds, cid)
         damaged = _path_damaged(ds, _zone_path(ds, premise))
-        for ev in hist:
-            others = [e for e in hist if e != ev]
-            rate = (sum(e in damaged for e in others) / len(others)) if others else 0.0
+        for k, ev in enumerate(hist):
+            # Only storms BEFORE this one: what a forecast would actually know. (Using all other
+            # storms leaks the label: a path hit once looks "never hit" in exactly that storm's row.)
+            earlier = hist[:k]
+            rate = history_rate(sum(e in damaged for e in earlier), len(earlier))
             rows.append({
                 "max_wind_mph": storms.loc[ev, "max_wind_mph"], "ice_in": storms.loc[ev, "ice_in"],
                 "overhead_pct": circ.loc[cid, "overhead_pct"], "length_mi": circ.loc[cid, "length_mi"],
                 "hist_path_rate": rate, "y": int(ev in damaged),
+                "event_id": ev, "circuit_id": cid, "customers": customers[path_key],
             })
-    df = pd.DataFrame(rows)
-    scaler = StandardScaler().fit(df[FEATURES])
-    model = LogisticRegression(C=1.0, max_iter=1000).fit(scaler.transform(df[FEATURES]), df.y)
+    return pd.DataFrame(rows)
+
+
+def fit(df: pd.DataFrame, features: list[str] = FEATURES) -> RiskModel:
+    scaler = StandardScaler().fit(df[features])
+    model = LogisticRegression(C=1.0, max_iter=1000).fit(scaler.transform(df[features]), df.y)
     return RiskModel(model, scaler, len(df))
+
+
+@lru_cache(maxsize=1)
+def train(ds: Dataset | None = None) -> RiskModel:
+    return fit(training_rows(ds or get_dataset()))
 
 
 def _factor_text(name: str, x: dict, ctx: dict) -> str:
@@ -137,7 +156,7 @@ def predict(premise_id: str, storm: dict | None = None, ds: Dataset | None = Non
     rm = train(ds)
     c = ds.circuits.set_index("circuit_id").loc[cid]
     x = {"max_wind_mph": storm["max_wind_mph"], "ice_in": storm.get("ice_in", 0.0),
-         "overhead_pct": c.overhead_pct, "length_mi": c.length_mi, "hist_path_rate": hits / len(hist)}
+         "overhead_pct": c.overhead_pct, "length_mi": c.length_mi, "hist_path_rate": history_rate(hits, len(hist))}
     xv = pd.DataFrame([x])[FEATURES]
     z = rm.scaler.transform(xv)[0]
     p = float(rm.model.predict_proba(z.reshape(1, -1))[0, 1])

@@ -22,7 +22,8 @@ DANGER = [
     ], "SAFETY: Get everyone out now and call 911. Don't touch electrical equipment. Stay 35 ft from any downed wires."),
     ("gas_co", [
         r"\bsmell(s|ing)? (of )?gas\b", r"\bgas (leak|smell)\b", r"\bcarbon monoxide\b", r"\bco (alarm|detector)\b",
-        r"\bgenerator (fumes|exhaust|inside|indoors|in the (garage|house|basement))\b", r"\bfumes\b",
+        r"\bgenerator (fumes|exhaust)\b", r"\bfumes\b",
+        r"\bgenerator\b.{0,30}\b(inside|indoors|in the (garage|house|basement|kitchen|living room)|in my (garage|house|basement))\b",
     ], "SAFETY: Leave the building now and call 911 from outside. Never run a generator indoors, in a garage, or near windows."),
     ("shock", [
         r"\belectrocut", r"\b(got|getting|been) (a )?shock(ed)?\b", r"\bshocked\b", r"\btingl(e|ing)\b.{0,20}\b(tap|faucet|water|outlet|metal)\b",

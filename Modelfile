@@ -1,6 +1,6 @@
-# Outage Concierge chatbot for Ollama, built on the local Llama 3.1.
+# Outage Concierge chatbot for Ollama, built on Qwen 2.5 (3B), small enough to run on a CPU-only laptop.
 #
-#   ollama pull llama3.1
+#   ollama pull qwen2.5:3b
 #   ollama create outage-concierge -f Modelfile
 #   ollama run outage-concierge
 #
@@ -9,7 +9,7 @@
 # The examples below contain no numbers on purpose: every number the bot says
 # must come from a tool result, so we never show it a number to copy.
 
-FROM llama3.1
+FROM qwen2.5:3b
 
 # Low temperature: same facts in, same answer out. Short replies fit an SMS.
 PARAMETER temperature 0

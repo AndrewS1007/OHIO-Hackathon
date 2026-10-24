@@ -151,7 +151,7 @@ def _llm_rewrite(card: dict, draft: str, max_chars: int) -> str | None:
         response = httpx.post(
             "http://localhost:11434/api/chat",
             json={
-                "model": "llama3.1", # Match the model you downloaded
+                "model": "qwen2.5:3b", # Match the model you downloaded
                 "messages": [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
