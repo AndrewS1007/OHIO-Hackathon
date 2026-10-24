@@ -102,9 +102,9 @@ def _handle(phone: str, body: str) -> dict:
 
     # Free-form questions (more than a few words) go to the AI concierge when it's on.
     # One-word commands and short questions stay on the fast, predictable keyword path.
-    if len(body.split()) > 5 and agent.available() and not s.battery_mode:
-        r = agent.answer(who(phone), body, agent.ChatContext(c, WORLD, channel="sms", who=who(phone)))
-        return _reply(r["text"], source=r["source"], kind="ai", tools=[x["tool"] for x in r["steps"]])
+    #if len(body.split()) > 5 and agent.available() and not s.battery_mode:
+        #r = agent.answer(who(phone), body, agent.ChatContext(c, WORLD, channel="sms", who=who(phone)))
+        #return _reply(r["text"], source=r["source"], kind="ai", tools=[x["tool"] for x in r["steps"]])
 
     kind = None
     if cmd in ("WHY", "WHY?"):
