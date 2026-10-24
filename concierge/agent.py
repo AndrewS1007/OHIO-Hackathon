@@ -4,13 +4,13 @@ How it stays trustworthy:
   - The safety gate runs BEFORE this (danger words never reach the AI).
   - Tools are bound to the customer's own account server-side. Claude can't ask
     about another address, and every tool returns a privacy-scrubbed fact card.
-  - Grounding check: every number in Claude's reply must appear in a tool
+  - Grounding check: every number in the AI's reply must appear in a tool
     result (or in the customer's own message). Otherwise we discard the reply
     and send a safe template answer instead.
   - No model reachable, a network error, or a refusal -> the keyword bot answers instead.
 
 Backends (CONCIERGE_AI picks one; default "auto"):
-  ollama  the local `outage-concierge` model from our Modelfile (OLLAMA_URL, OLLAMA_MODEL)
+  ollama  the local model (OLLAMA_URL, OLLAMA_MODEL)
   claude  the Anthropic API (ANTHROPIC_API_KEY or an `ant auth login` profile)
   auto    Ollama if it's running with our model, else Claude if credentials exist
   0       keyword mode only
@@ -28,7 +28,7 @@ from .narrate import numbers_grounded, numbers_in
 
 MODEL = "claude-opus-5-5"
 OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434").rstrip("/")
-OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "outage-concierge")
+OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "qwen2.5:3b")
 OLLAMA_TIMEOUT = float(os.environ.get("OLLAMA_TIMEOUT", "240"))  # CPU-only laptops take a while per round
 MAX_TOOL_ROUNDS = 5
 MAX_HISTORY_MESSAGES = 24  # start a fresh conversation after this, rather than editing old turns
@@ -232,20 +232,31 @@ OLLAMA_TOOLS = [{"type": "function", "function": {"name": t["name"], "descriptio
                                                  "parameters": t["input_schema"]}} for t in TOOLS]
 
 
-def _ollama_chat(messages: list) -> dict:
+def _ollama_chat(messages: list, max_chars: int) -> dict:
     import httpx
+    
+    # Inject the system prompt dynamically (bypassing the need for a Modelfile)
+    full_messages = [
+        {"role": "system", "content": SYSTEM.format(max_chars=max_chars)}
+    ] + messages
+    
     r = httpx.post(f"{OLLAMA_URL}/api/chat", timeout=OLLAMA_TIMEOUT, json={
-        "model": OLLAMA_MODEL, "messages": messages, "tools": OLLAMA_TOOLS,
-        "stream": False, "keep_alive": "30m"})
+        "model": OLLAMA_MODEL, 
+        "messages": full_messages, 
+        "tools": OLLAMA_TOOLS,
+        "stream": False, 
+        "keep_alive": "30m",
+        "options": {
+            "temperature": 0,
+            "num_ctx": 8192
+        }
+    })
     r.raise_for_status()
     return r.json()["message"]
 
 
-def _ask_ollama(conv: Conversation, ctx: ChatContext, steps: list, tool_outputs: list) -> str:
-    """Tool loop against the local model. Its rules live in the Modelfile's SYSTEM.
-
-    Almost every question starts with get_outage_status, so we run it up front and hand the
-    model its result: one model call instead of two, which matters on a CPU-only laptop."""
+def _ask_ollama(conv: Conversation, ctx: ChatContext, steps: list, tool_outputs: list, max_chars: int) -> str:
+    """Tool loop against the local model."""
     status = run_tool("get_outage_status", {}, ctx)
     tool_outputs.append(status)
     steps.append({"tool": "get_outage_status", "label": TOOL_LABELS["get_outage_status"], "input": {}, "result": status})
@@ -254,12 +265,16 @@ def _ask_ollama(conv: Conversation, ctx: ChatContext, steps: list, tool_outputs:
         {"role": "tool", "tool_name": "get_outage_status", "content": json.dumps(status, ensure_ascii=False)},
     ]
     for _ in range(MAX_TOOL_ROUNDS + 1):
-        msg = _ollama_chat(conv.messages)
+        msg = _ollama_chat(conv.messages, max_chars)
         calls = msg.get("tool_calls") or []
         conv.messages.append({"role": "assistant", "content": msg.get("content", ""),
                               **({"tool_calls": calls} if calls else {})})
         if not calls:
-            return (msg.get("content") or "").strip()
+            text = (msg.get("content") or "").strip()
+            # Qwen 2.5 3B quirk: if it hallucinates raw JSON text instead of proper tool calls, reject it.
+            if text.startswith("{") and ('"name"' in text or '"parameters"' in text):
+                raise RuntimeError("Qwen output raw JSON instead of text")
+            return text
         for call in calls:
             name, args = call["function"]["name"], call["function"].get("arguments") or {}
             if isinstance(args, str):
@@ -287,7 +302,7 @@ def ask(conversation_id: str, user_text: str, ctx: ChatContext, client=None) -> 
     steps, tool_outputs = [], []
     try:
         if use_ollama:
-            text = _ask_ollama(conv, ctx, steps, tool_outputs)
+            text = _ask_ollama(conv, ctx, steps, tool_outputs, max_chars)
             return _finish(text, user_text, ctx, steps, tool_outputs, "ai")
         client = client or _client()
         for _ in range(MAX_TOOL_ROUNDS + 1):
@@ -354,4 +369,3 @@ def answer(conversation_id: str, user_text: str, ctx: ChatContext, client=None) 
     if r["source"] in ("rejected", "fallback"):
         text = "I couldn't check that reliably, so here's what I know for sure. " + text
     return {**r, "text": text + " Reply HELP to reach a person."}
-
