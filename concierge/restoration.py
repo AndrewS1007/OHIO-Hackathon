@@ -142,8 +142,9 @@ def simulate(premise_id: str, sc: Scenario, n_sims: int = 1000, seed: int = 0, d
             # Repairs on one circuit in one storm wait similar amounts: one shared draw per run,
             # plus a little spread (records only have dates, so +-12 h is within the noise).
             wait = np.clip(rng.choice(sc.start_delays) + rng.uniform(-12, 12, size=len(report)), 0, None)
-            # Fewer crews than usual -> longer waits (and more crews -> shorter).
-            wait = wait * (max(1, sc.crews_baseline or sc.crews) / max(1, sc.crews))
+            # Fewer crews than usual -> longer waits (and more crews -> shorter). Square root,
+            # not linear: only part of the wait is crews (the rest is materials, dispatch, travel).
+            wait = wait * (max(1, sc.crews_baseline or sc.crews) / max(1, sc.crews)) ** 0.5
         else:
             wait = rng.uniform(1, 3, size=len(report))
         avail = report + wait

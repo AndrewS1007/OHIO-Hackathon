@@ -8,7 +8,7 @@ from __future__ import annotations
 import copy
 from functools import lru_cache
 
-from . import backtest, replay, service
+from . import backtest, replay, rules, service
 from .data import Dataset, get_dataset
 from .restoration import damage_label
 from .risk import predict
@@ -89,8 +89,23 @@ def replay_with_texts(premise_id: str, customer: dict, what_if: dict | None = No
     ev = _replay_event(ds)
     tl = replay.timeline(premise_id, ev, customer=customer, what_if=what_if, calib=backtest.live_calibration(ds), ds=ds)
     cust = copy.deepcopy(customer)
+    risk = predict(premise_id, ds=ds)
+    escalations, done_rules = [], set()
     for e in tl["events"]:
         world = service.World("outage", e["t"], dict(what_if or {}))
+        if e.get("estimate") and e["estimate"].get("status") == "ok":
+            # Same escalation rules the SMS side uses (R4 check-in call, R5 human outreach).
+            plan = rules.alert_plan(cust, risk, e["estimate"], hours_already_out=e["t"] - tl["outage_h"])
+            for x in plan["escalations"]:
+                key = (x["rule"], x.get("need"))
+                if key in done_rules:
+                    continue
+                done_rules.add(key)
+                label = {"check_in_call": "Check-in call placed", "human_outreach": "Outreach team notified",
+                         "human_review": "Message sent for human review"}.get(x["action"], x["action"])
+                escalations.append({"t": e["t"], "kind": "escalation", "rule": x["rule"], "action": x["action"],
+                                    "text": f"{label}: {x['why']}.", "clock": service.fmt_clock(world.now(ds), service.STORM_START),
+                                    "segments": 0, "reasons": []})
         extra = {}
         if e["kind"] == "estimate_updated":
             extra["reasons_changed"] = e["reasons"]
@@ -103,6 +118,8 @@ def replay_with_texts(premise_id: str, customer: dict, what_if: dict | None = No
         e["clock"] = service.fmt_clock(world.now(ds), service.STORM_START)
         e["card"] = msg["card"]
         e.pop("estimate", None)
+    # Escalations go right after the text that triggered them.
+    tl["events"] = sorted(tl["events"] + escalations, key=lambda x: (x["t"], x["kind"] == "escalation"))
     tl["storm_start"] = service.STORM_START.isoformat()
     return tl
 

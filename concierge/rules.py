@@ -48,7 +48,7 @@ def alert_plan(customer: dict, risk: dict, restoration: dict | None = None, batt
             if bh is not None and bh < p90:
                 plan["escalations"].append({
                     "rule": "R4", "action": "check_in_call", "need": n["need"],
-                    "why": f"Your {n['need']} battery ({bh} h) may run out before power is back (up to {p90:g} h)",
+                    "why": f"Your {n['need']} battery ({bh} h) may run out before power is back (it could be out up to about {round(p90)} h)",
                 })
         if needs and p90 > 8:
             plan["escalations"].append({"rule": "R5", "action": "human_outreach", "why": "Medical need with a long possible outage"})
