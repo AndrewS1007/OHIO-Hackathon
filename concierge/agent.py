@@ -30,7 +30,7 @@ from .narrate import numbers_grounded, numbers_in
 
 MODEL = "claude-opus-5-5"
 OLLAMA_URL = "http://174.100.108.202:11434"
-OLLAMA_MODEL = "qwen2.5:7b"
+OLLAMA_MODEL = "outage-concierge-7b"
 OLLAMA_TIMEOUT = 240.0
 MAX_TOOL_ROUNDS = 5
 MAX_HISTORY_MESSAGES = 24  # start a fresh conversation after this, rather than editing old turns
