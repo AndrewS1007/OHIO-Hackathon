@@ -282,3 +282,12 @@ def test_fewer_crews_means_longer_wait():
     p = MARIA["premise_id"]
     p50 = lambda w: estimate(p, scenario_at(DS, p, "E07", 7.0, w), n_sims=400, seed=1)["hours_from_now"]["p50"]
     assert p50({"crews": 1}) > p50(None) > p50({"crews": 5})
+
+
+def test_waits_can_be_learned_per_storm_size(monkeypatch):
+    monkeypatch.setenv("CONCIERGE_LARGE_STORM_REPORTS", "100")
+    small = fit_start_delays(DS, size="small")
+    large = fit_start_delays(DS, size="large")
+    pooled = fit_start_delays(DS)
+    assert small is not None and large is not None
+    assert len(small) + len(large) == len(pooled)  # every past repair lands in exactly one size group

@@ -34,7 +34,7 @@ from .replay import actual_restore_h, event_records, scenario_at, system_reports
 from .restoration import MIN_BUCKET_CASES, apply_calibration, estimate, pick_calibration, prestorm_scenario, storm_size
 
 CACHE_DIR = ROOT / ".cache"
-CACHE_VERSION = "4"  # bump when the restoration engine changes in a way that changes estimates
+CACHE_VERSION = "5"  # bump when the restoration engine changes in a way that changes estimates
 
 
 # ---------- cases (cached to disk: ~100 s on the real data) ----------

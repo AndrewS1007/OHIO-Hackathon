@@ -11,7 +11,7 @@ import math
 import pandas as pd
 
 from .data import Dataset, get_dataset
-from .restoration import fit_start_delays, Job, Scenario, default_crews, estimate, explain_change, prestorm_scenario
+from .restoration import fit_start_delays, storm_size, Job, Scenario, default_crews, estimate, explain_change, prestorm_scenario
 from .rules import should_send_update, vague_move_is_big
 
 
@@ -48,10 +48,12 @@ def scenario_at(ds: Dataset, premise_id: str, event_id: str, t: float, what_if: 
     crews = int(what_if.get("crews", crews))
     if base_lambda is None:
         base_lambda = prestorm_scenario(premise_id, {"max_wind_mph": storm.max_wind_mph}, ds).hidden_lambda
+    n_reports = system_reports(ds, event_id, t)
     return Scenario(crews=crews, access=float(what_if.get("access", 1.0)), now_h=t,
                     hidden_lambda=hidden_lambda(base_lambda, len(known), t), jobs=jobs,
-                    system_reports=system_reports(ds, event_id, t),
-                    start_delays=fit_start_delays(ds, exclude_event=event_id), crews_baseline=crews_recorded,
+                    system_reports=n_reports,
+                    start_delays=fit_start_delays(ds, exclude_event=event_id, size=storm_size(n_reports)),
+                    crews_baseline=crews_recorded,
                     known_out=_is_out(ds, premise_id, recs, t))
 
 

@@ -298,23 +298,32 @@ def jobs_from_records(records) -> list[Job]:
 MIN_DELAY_RECORDS = 20  # fewer past repairs than this -> keep the simple 1-3 h assumption
 
 
-def fit_start_delays(ds: Dataset, exclude_event: str | None = None) -> np.ndarray | None:
+def fit_start_delays(ds: Dataset, exclude_event: str | None = None, size: str | None = None) -> np.ndarray | None:
     """How long past repairs waited for a crew: (repaired - reported) minus the repair work itself.
 
     exclude_event leaves one storm out, so an estimate for that storm (in the backtest
-    or the replay) never learns from the storm it's predicting."""
+    or the replay) never learns from the storm it's predicting.
+    size ("small"/"large") uses only past storms of that size: in the real records, repairs
+    in small storms waited much longer (median ~58 h vs ~33 h), likely because crews aren't
+    mobilized for them. Falls back to all storms if that size has too little history."""
     cache = ds.__dict__.setdefault("_start_delays", {})
-    if exclude_event in cache:
-        return cache[exclude_event]
+    key = (exclude_event, size)
+    if key in cache:
+        return cache[key]
     d = ds.damage if exclude_event is None else ds.damage[ds.damage.event_id != exclude_event]
     d = d[d.damage_type.isin(list(ds.labor_hours))]
+    if size is not None:
+        totals = ds.damage.groupby("event_id").size()
+        same = d[d.event_id.map(totals).map(lambda n: storm_size(int(n))) == size]
+        if len(same) >= MIN_DELAY_RECORDS:
+            d = same
     out = None
     if len(d) >= MIN_DELAY_RECORDS:
         extra = d["extra_hours"] if "extra_hours" in d else 0.0
         work = (d.damage_type.map(ds.labor_hours) * d.quantity + extra) * float(np.prod(list(ds.indirect.values())))
         elapsed = (d.repair_complete_time - d.report_time).dt.total_seconds() / 3600
         out = np.clip((elapsed - work).to_numpy(dtype=float), 0.0, None)
-    cache[exclude_event] = out
+    cache[key] = out
     return out
 
 
