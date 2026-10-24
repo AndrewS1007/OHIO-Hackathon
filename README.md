@@ -5,6 +5,8 @@
 > Most outage tools stop working at the moment you need them: the power is out, the Wi-Fi is down, and your phone is at 30%.
 > We built an outage assistant that works **in the dark**, over SMS and voice, with a battery-aware, offline-first design.
 
+**Run it:** see [SETUP.md](SETUP.md) (demo script, SMS simulator, web view at http://localhost:8000). The plan with our latest additions (safety gate, guardrails, storm replay, honesty score) is in [PLAN.md](PLAN.md).
+
 ---
 
 ## The challenge (summary)

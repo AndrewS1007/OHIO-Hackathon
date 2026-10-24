@@ -1,6 +1,6 @@
 # Built for the Dark: AI Outage Concierge
 
-Hack/OHIO 2026 · AEP Challenge. The full concept is in [PLAN.md](PLAN.md).
+Hack/OHIO 2026 · AEP Challenge. The concept is in [README.md](README.md); the updated plan is in [PLAN.md](PLAN.md).
 
 An outage assistant that works over plain SMS and voice, with a deterministic engine that owns every number and an optional AI layer that only rewrites the wording.
 
