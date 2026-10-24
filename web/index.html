@@ -70,8 +70,33 @@ select { padding: 6px 8px; border-radius: 8px; border: 1px solid var(--border); 
 .phase { font-size: 12px; color: var(--ink-2); }
 button.play { width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--border); background: var(--surface-2); cursor: pointer; }
 main { display: grid; gap: 16px; padding: 16px 24px 40px; grid-template-columns: minmax(0, 1fr) 360px;
-  grid-template-areas: "card phone" "cone phone" "tree tree" "map honesty"; max-width: 1320px; margin: 0 auto; }
-@media (max-width: 980px) { main { grid-template-columns: minmax(0,1fr); grid-template-areas: "card" "phone" "cone" "tree" "map" "honesty"; padding: 12px 16px 32px; } .clockbar, header.top { padding-left: 16px; padding-right: 16px; } }
+  grid-template-areas: "h1 h1" "card phone" "tree phone" "h2 h2" "cone cone" "map honesty"; max-width: 1320px; margin: 0 auto; }
+@media (max-width: 980px) { main { grid-template-columns: minmax(0,1fr); grid-template-areas: "h1" "card" "phone" "tree" "h2" "cone" "map" "honesty"; padding: 12px 16px 32px; } .clockbar, header.top, .intro { padding-left: 16px; padding-right: 16px; } }
+.section-h { margin: 8px 2px -4px; }
+.section-h h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-2); margin: 0; }
+.section-h p { margin: 2px 0 0; font-size: 13px; color: var(--muted); }
+#c-map, #c-honesty { align-self: start; }
+#h1 { grid-area: h1; } #h2 { grid-area: h2; margin-top: 16px; }
+.intro { display: flex; flex-wrap: wrap; gap: 8px 22px; align-items: center; padding: 10px 24px; background: var(--surface-2); border-bottom: 1px solid var(--border); font-size: 13.5px; color: var(--ink-2); }
+.intro b { color: var(--ink); }
+.intro .num { display: inline-flex; width: 20px; height: 20px; border-radius: 50%; align-items: center; justify-content: center; background: var(--series-1); color: #fff; font-size: 12px; font-weight: 700; margin-right: 6px; }
+.intro .x { margin-left: auto; border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 18px; line-height: 1; }
+.jumps { display: flex; gap: 6px; flex-wrap: wrap; }
+.jumps button { font-size: 12.5px; padding: 5px 10px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface-2); cursor: pointer; }
+.jumps button[aria-current=true] { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+.pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 2px 9px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface-2); color: var(--ink); margin-top: 2px; }
+.pill .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+@media (max-width: 720px) {
+  .clockbar { gap: 6px 10px; padding-top: 8px; padding-bottom: 8px; }
+  .jumps { order: -1; width: 100%; flex-wrap: nowrap; overflow-x: auto; padding-bottom: 2px; }
+  .jumps button { flex: 0 0 auto; }
+  .clockbar input[type=range] { min-width: 0; flex: 1 1 120px; }
+  .clockbar > div:last-child { flex-basis: 100%; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .clock { min-width: 0; font-size: 13px; }
+  .pill { margin-top: 0; }
+  button.play { width: 32px; height: 32px; }
+}
+.who-line { color: var(--ink-2); font-size: 13px; margin: -6px 0 12px; }
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 16px 18px; min-width: 0; }
 .card h2 { font-size: 15px; margin: 0 0 2px; }
 .card .lede { color: var(--ink-2); font-size: 13px; margin: 0 0 12px; }
@@ -88,7 +113,7 @@ main { display: grid; gap: 16px; padding: 16px 24px 40px; grid-template-columns:
 .lane .note { color: var(--muted); font-size: 12px; margin-top: 6px; }
 
 /* phone */
-.phone { background: var(--phone-bg); border-radius: 28px; border: 1px solid var(--border); padding: 14px 12px; height: 640px; display: flex; flex-direction: column; }
+.phone { background: var(--phone-bg); border-radius: 28px; border: 1px solid var(--border); padding: 14px 12px; height: 600px; display: flex; flex-direction: column; }
 .phone .bar { text-align: center; font-size: 12px; color: var(--ink-2); padding-bottom: 8px; border-bottom: 1px solid var(--border); }
 .msgs { flex: 1; overflow-y: auto; padding: 10px 2px; display: flex; flex-direction: column; gap: 10px; }
 .bubble { background: var(--bubble); border: 1px solid var(--border); border-radius: 16px 16px 16px 4px; padding: 9px 11px; font-size: 13.5px; white-space: pre-wrap; max-width: 92%; }
@@ -104,7 +129,7 @@ main { display: grid; gap: 16px; padding: 16px 24px 40px; grid-template-columns:
 .how .ok { color: var(--good-text); }
 .mode { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 999px; font-size: 11px; background: var(--surface); border: 1px solid var(--border); }
 .typing { color: var(--muted); font-size: 13px; padding: 4px 6px; }
-.chips { display: flex; gap: 6px; overflow-x: auto; padding: 8px 0 6px; border-top: 1px solid var(--border); }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; padding: 8px 0 6px; border-top: 1px solid var(--border); }
 .chips button { flex: 0 0 auto; font-size: 12px; padding: 5px 9px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); cursor: pointer; }
 .ask { display: flex; gap: 6px; }
 .ask input { flex: 1; min-width: 0; font: inherit; font-size: 14px; padding: 9px 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); color: var(--ink); }
@@ -168,35 +193,44 @@ th, td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--grid
     <div class="sub">AI Outage Concierge · what a customer sees, hour by hour</div>
   </div>
   <div class="spacer"></div>
-  <label class="chip">Customer
-    <select id="persona" aria-label="Customer"></select>
+  <label class="chip">Viewing as
+    <select id="persona" aria-label="Customer to view as"></select>
   </label>
   <span class="chip" id="storm-chip">Loading storm…</span>
+  <span class="chip" id="data-chip"></span>
 </header>
+<div class="intro" id="intro">
+  <span><span class="num">1</span><b>Pick a customer</b> next to "Viewing as".</span>
+  <span><span class="num">2</span><b>Move through the storm</b> with the buttons below, or press ▶.</span>
+  <span><span class="num">3</span><b>Ask the concierge</b> anything in their phone.</span>
+  <button class="x" id="intro-x" aria-label="Hide these tips">×</button>
+</div>
 
 <div class="clockbar" role="group" aria-label="Storm clock">
   <button class="play" id="play" aria-label="Play storm replay">▶</button>
+  <div class="jumps" id="jumps" aria-label="Jump to a moment"></div>
   <input type="range" id="t" min="-18" max="24" step="0.5" value="-18" aria-label="Storm hour">
   <div>
     <div class="clock" id="clock">—</div>
-    <div class="phase" id="phase">—</div>
+    <div class="pill" id="phase"><span class="dot"></span><span>—</span></div>
   </div>
 </div>
 
 <main>
+  <div class="section-h" id="h1"><h2>What the customer sees</h2><p>Everything here is what they'd actually get, by text or in the app.</p></div>
   <section class="card" id="c-card" aria-live="polite">
-    <h2>What the customer knows right now</h2>
-    <p class="lede">Facts, estimates and actions are always kept apart.</p>
+    <h2 id="card-title">Right now</h2>
+    <p class="who-line" id="who-line"></p>
     <div class="lanes">
-      <div class="lane"><div class="tag">✓ Confirmed</div><div id="lane-ok"></div></div>
-      <div class="lane"><div class="tag">≈ Our estimate</div><div id="lane-est"></div></div>
-      <div class="lane"><div class="tag">→ Your action</div><div id="lane-do"></div></div>
+      <div class="lane"><div class="tag">✓ What we know</div><div id="lane-ok"></div></div>
+      <div class="lane"><div class="tag">≈ Our best estimate</div><div id="lane-est"></div></div>
+      <div class="lane"><div class="tag">→ What to do</div><div id="lane-do"></div></div>
     </div>
   </section>
 
   <section class="card" id="c-phone">
     <h2>Their phone</h2>
-    <p class="lede">The texts they'd get, and a chat with the AI concierge. Ask it anything; it answers as of the storm clock above.</p>
+    <p class="lede">Alerts arrive on their own as the storm plays. Type a question to chat with the AI concierge.</p>
     <div class="phone">
       <div class="bar">Outage Concierge <span class="mode" id="ai-mode">…</span></div>
       <div class="msgs" id="msgs" aria-live="polite"></div>
@@ -208,22 +242,29 @@ th, td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--grid
     </div>
   </section>
 
+  <section class="card" id="c-tree">
+    <h2>What has to be fixed before power is back</h2>
+    <p class="lede">Power flows left to right. A break anywhere upstream means this home is out.</p>
+    <div class="tree" id="tree"></div>
+  </section>
+
+  <div class="section-h" id="h2"><h2>Behind the estimate</h2><p>How the predictions are made, and how well they've held up. For judges and operators.</p></div>
   <section class="card" id="c-cone">
-    <h2>Restoration estimate over time</h2>
-    <p class="lede">Replaying a real past storm. Across: when we made the estimate. Up: when we said power would be back. Each hour we re-estimate with only what crews had reported by then.</p>
+    <h2>How our estimate changed during the storm</h2>
+    <p class="lede" id="cone-lede">We replay a past storm. Each hour the estimate is redone using only what crews had reported by then. A good estimate narrows toward the dashed line, when power actually came back.</p>
     <div class="cone-wrap">
       <div>
         <div id="cone"></div>
         <div class="legend" id="cone-legend">
-          <span><span class="sw" style="background:var(--band-fill);outline:1px solid var(--series-1)"></span>Likely window (P10–P90)</span>
-          <span><span class="sw" style="background:var(--series-1);height:2px;vertical-align:3px"></span>Most likely (P50)</span>
-          <span>● Text sent</span>
-          <span>– – Power actually back</span>
+          <span><span class="sw" style="background:var(--band-fill);outline:1px solid var(--series-1)"></span>Likely window (8 in 10 outages end inside it)</span>
+          <span><span class="sw" style="background:var(--series-1);height:2px;vertical-align:3px"></span>Most likely time</span>
+          <span>● Text sent to the customer</span>
+          <span>– – Power actually came back</span>
         </div>
         <details><summary>Show as a table</summary><div id="cone-table"></div></details>
       </div>
       <div class="whatif" role="group" aria-label="What-if controls">
-        <h3>What if…</h3>
+        <h3>Try a what-if</h3>
         <label>Crews on this circuit</label>
         <div class="seg" id="crews"></div>
         <label for="poles">Extra broken poles found at hour 3: <b id="poles-v">0</b></label>
@@ -238,18 +279,13 @@ th, td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--grid
     </div>
   </section>
 
-  <section class="card" id="c-tree">
-    <h2>Power family tree</h2>
-    <p class="lede">Everything that has to work for power to reach this home. Damage shows up as crews report it.</p>
-    <div class="tree" id="tree"></div>
-  </section>
 
   <section class="card" id="c-map">
-    <h2>Outage risk by area</h2>
-    <p class="lede">Coming storm risk for each area. During the replay, outlined areas are without power. Click an area to see it.</p>
+    <h2>Outage risk for the coming storm</h2>
+    <p class="lede">Each block is one circuit, split into 4 neighborhoods. Darker means higher risk. A red outline means no power at the current storm hour. Click a neighborhood to view it.</p>
     <div id="map"></div>
     <div class="legend" id="map-legend"></div>
-    <div class="caveat">Schematic layout grouped by circuit, not real geography.</div>
+    <div class="caveat">Schematic: blocks are grouped by substation, not drawn on a real map.</div>
   </section>
 
   <section class="card" id="c-honesty">
@@ -262,13 +298,13 @@ th, td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--grid
     <div class="tiles" id="tiles"></div>
     <div id="strip"></div>
     <div class="legend">
-      <span><span class="sw" style="background:var(--strip)"></span>Our range (P10–P90)</span>
+      <span><span class="sw" style="background:var(--strip)"></span>Our likely window</span>
       <span><span style="color:var(--series-1)">●</span> Real time, inside range</span>
       <span><span style="color:var(--critical)">✕</span> Real time, outside range</span>
     </div>
     <details open><summary>Storm by storm</summary><div id="per-storm"></div></details>
     <details><summary>Alert and escalation rules</summary><ol id="rules"></ol></details>
-    <div class="caveat">Built on made-up data, so these numbers show the method, not real-world accuracy.</div>
+    <div class="caveat" id="honesty-caveat"></div>
   </section>
 </main>
 <div id="tip" role="tooltip"></div>
@@ -311,6 +347,15 @@ async function init() {
   S.personas = personas; S.map = map; S.backtest = bt;
   const st = info.storm;
   $("storm-chip").textContent = `${st.name} · ${st.max_wind_mph} mph winds · arrives Sun 2pm`;
+  S.info = info;
+  const real = info.data_source === "real";
+  $("data-chip").textContent = real ? `Real AEP data · replaying the ${info.replay_storm ? info.replay_storm.name : "largest storm"}` : "Demo data (made up)";
+  $("data-chip").title = real ? "Circuits, damage and repair records from the AEP challenge package. Customers are synthetic personas." : "Fake data shaped like the AEP package";
+  $("honesty-caveat").textContent = real
+    ? "Scored on real AEP damage records. The records have dates but no times, so restoration times are only accurate to about half a day."
+    : "Built on made-up demo data, so these numbers show the method, not real-world accuracy.";
+  try { if (localStorage.getItem("introHidden") === "1") $("intro").hidden = true; } catch (e) {}
+  $("intro-x").onclick = () => { $("intro").hidden = true; try { localStorage.setItem("introHidden", "1"); } catch (e) {} };
   $("persona").innerHTML = personas.map((p, i) => {
     const needs = p.declared_needs.map(n => n.need.replace("_", " ")).join(", ");
     return `<option value="${i}">${esc(p.name)}${needs ? " (" + esc(needs) + ")" : ""}</option>`;
@@ -361,7 +406,20 @@ async function loadReplay(isWhatIf) {
   $("t").max = end;
   if (!isWhatIf && S.t > end) S.t = end;
   if (isWhatIf) describeWhatIf(before, S.replay);
-  renderCone(); renderTime();
+  renderJumps(); renderCone(); renderTime();
+}
+
+function renderJumps() {
+  const R = S.replay, marks = [["Night before", -PRE_H], ["Storm hits", 0]];
+  if (R && R.status === "ok") {
+    marks.push(["Power goes out", Math.ceil(R.outage_h * 2) / 2]);
+    const upd = R.events.find(e => e.kind === "estimate_updated");
+    if (upd) marks.push(["Estimate changes", upd.t]);
+    marks.push(["Power back", Math.ceil(R.restored_h * 2) / 2]);
+  }
+  S.marks = marks;
+  $("jumps").innerHTML = marks.map(([l, t]) => `<button type="button" data-t="${t}">${esc(l)}</button>`).join("");
+  $("jumps").querySelectorAll("button").forEach(b => b.onclick = () => { stopPlay(); S.t = +b.dataset.t; renderTime(); });
 }
 
 function stepAt(t) {
@@ -389,12 +447,18 @@ function renderTime() {
   $("t").value = S.t;
   const t = S.t, R = S.replay;
   $("clock").textContent = fullClock(t);
-  let phase;
-  if (t < 0) phase = `Before the storm · arrives in ${Math.round(-t)} h`;
-  else if (R && R.status === "ok" && t >= R.outage_h && t < R.restored_h) phase = `Storm hour ${t} · power out`;
-  else if (R && R.status === "ok" && t >= R.restored_h) phase = `Storm hour ${t} · power restored`;
-  else phase = `Storm hour ${t} · power on`;
-  $("phase").textContent = phase;
+  let phase, color;
+  if (t < 0) { phase = `Before the storm · it arrives in ${Math.round(-t)} h`; color = "var(--muted)"; }
+  else if (R && R.status === "ok" && t >= R.outage_h && t < R.restored_h) { phase = `Power out · storm hour ${t}`; color = "var(--critical)"; }
+  else if (R && R.status === "ok" && t >= R.restored_h) { phase = `Power restored · storm hour ${t}`; color = "var(--good)"; }
+  else { phase = `Power on · storm hour ${t}`; color = "var(--good)"; }
+  $("phase").innerHTML = `<span class="dot" style="background:${color}"></span><span>${esc(phase)}</span>`;
+  let cur = null;
+  (S.marks || []).forEach(([, mt]) => { if (mt <= t) cur = mt; });
+  $("jumps").querySelectorAll("button").forEach(b => b.setAttribute("aria-current", +b.dataset.t === cur));
+  const p = S.persona, needs = (p.declared_needs || []).map(n => n.need === "insulin_fridge" ? "keeps insulin in the fridge" : `uses a ${n.need}${n.battery_hours ? " (" + n.battery_hours + " h battery)" : ""}`);
+  $("card-title").textContent = `Right now for ${p.name}`;
+  $("who-line").textContent = (needs.length ? `${p.name} ${needs.join(", ")}, which they told us about. ` : "No medical or special needs declared. ") + "Facts, estimates and actions are kept separate.";
   renderLanes(); renderPhone(); renderChips(); renderTree(); paintMapOutages(); moveConeCursor();
 }
 
@@ -456,6 +520,10 @@ function renderPhone() {
 }
 
 // ---------- AI chat ----------
+function dur(h) {
+  if (h == null) return "–";
+  return h >= 72 ? `${Math.round(h / 24)} days` : `${Math.round(h)} h`;
+}
 const SOURCE_LABEL = { ai: "AI", simulated: "Simulated AI (no API key)", keyword: "Keyword bot", fallback: "Keyword bot (AI unavailable)", rejected: "Keyword bot (AI answer failed a check)", safety_gate: "Safety message (no AI)" };
 function stepSummary(s) {
   const r = s.result || {};
@@ -485,10 +553,11 @@ function chatHtml(m) {
       + `</ol></details>` : "";
   return `<div><div class="who">${esc(SOURCE_LABEL[m.source] || m.source)}</div><div class="bubble ai">${esc(m.text)}</div><div class="meta">${esc(m.at)}</div>${how}</div>`;
 }
-const CHIPS_PRE = ["Will I lose power?", "I use a CPAP machine. Should we stay somewhere else tonight?", "Do I qualify for outage alerts?", "Where should I put my generator?"];
-const CHIPS_OUT = ["When will my power be back?", "Why is it taking so long?", "What if only 1 crew was working on it?", "My CPAP battery lasts 8 hours. What should I do?"];
 function renderChips() {
-  const list = S.t < 0 ? CHIPS_PRE : CHIPS_OUT;
+  const dev = (S.persona.declared_needs || []).find(n => n.battery_hours && n.need !== "insulin_fridge");
+  const list = S.t < 0
+    ? ["Will I lose power?", dev ? `I use a ${dev.need}. Should we leave tonight?` : "How should I prepare?", "Do I get alerts?", "Generator safety tips?"]
+    : ["When is my power back?", "Why is it taking so long?", "What if only 1 crew?", dev ? `My ${dev.need} lasts ${dev.battery_hours} hours. Help?` : "Is my food still safe?"];
   $("chips").innerHTML = list.map(c => `<button type="button">${esc(c)}</button>`).join("");
   $("chips").querySelectorAll("button").forEach(b => b.onclick = () => sendChat(b.textContent));
 }
@@ -547,11 +616,12 @@ function renderCone() {
   const steps = R.steps;
   const xMax = Math.ceil(R.restored_h + 3);
   const yMaxRaw = Math.max(...steps.map(s => s.p90), R.restored_h + 6);
-  const yMax = Math.min(Math.ceil(yMaxRaw / 6) * 6, 72);
+  const yMax = Math.min(Math.ceil(yMaxRaw / 12) * 12, Math.max(72, Math.ceil(R.restored_h * 1.6 / 12) * 12));
   const x = h => m.l + (h / xMax) * (W - m.l - m.r);
   const y = h => m.t + (1 - Math.min(h, yMax) / yMax) * (H - m.t - m.b);
   let g = "";
-  for (let v = 0; v <= yMax; v += 12) g += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(v)}" y2="${y(v)}" stroke="var(--grid)"/><text x="${m.l - 8}" y="${y(v) + 4}" text-anchor="end">${clockAt(v)}</text>`;
+  const yStep = yMax > 96 ? 24 : 12;
+  for (let v = 0; v <= yMax; v += yStep) g += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(v)}" y2="${y(v)}" stroke="var(--grid)"/><text x="${m.l - 8}" y="${y(v) + 4}" text-anchor="end">${clockAt(v)}</text>`;
   const xStep = Math.max(3, Math.ceil((xMax * 78 / (W - m.l - m.r)) / 3) * 3);
   for (let v = 0; v <= xMax; v += xStep) g += `<text x="${x(v)}" y="${H - 10}" text-anchor="middle">${clockAt(v)}</text>`;
   g += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(0)}" y2="${y(0)}" stroke="var(--axis)"/>`;
@@ -610,40 +680,44 @@ function moveConeCursor() {
 const BAND = { Low: "var(--risk-low)", Elevated: "var(--risk-elevated)", High: "var(--risk-high)", Severe: "var(--risk-severe)" };
 function renderMap() {
   const el = $("map");
-  const W = Math.max(300, el.clientWidth || 480);
-  const blocksPerRow = 4, gap = 14;
-  const r = Math.min(22, (W - gap * (blocksPerRow - 1)) / (blocksPerRow * 2 + 0.5) / Math.sqrt(3));
-  const hw = Math.sqrt(3) * r, vh = 1.5 * r;
-  let g = "", maxY = 0;
-  const hex = (cx, cy) => Array.from({ length: 6 }, (_, k) => { const a = Math.PI / 180 * (60 * k - 30); return `${cx + r * Math.cos(a)},${cy + r * Math.sin(a)}`; }).join(" ");
-  S.map.forEach((c, i) => {
-    const parts = c.cell.split("-"), rf = parts[2];
-    const zone = (+rf[0] - 1) * 2 + (+rf[1] - 1);
-    const bx = (c.circuit_n - 1) % blocksPerRow, by = Math.floor((c.circuit_n - 1) / blocksPerRow);
-    const col = zone % 2, row = Math.floor(zone / 2);
-    const cx = r + 2 + bx * (2 * hw + hw / 2 + gap) + col * hw + (row ? hw / 2 : 0);
-    const cy = r + 2 + by * (2 * vh + r / 2 + gap + 12) + row * vh;
-    maxY = Math.max(maxY, cy + r + 16);
-    const fill = c.band ? BAND[c.band] : "url(#nodata)";
-    const mine = S.persona && S.persona.premise_id === c.premise_id;
-    g += `<polygon class="cell" data-i="${i}" points="${hex(cx, cy)}" fill="${fill}" stroke="var(--surface)" stroke-width="2" style="cursor:pointer"/>`;
-    g += `<polygon class="out" data-i="${i}" points="${hex(cx, cy)}" fill="none" stroke="var(--critical)" stroke-width="3" stroke-dasharray="4 2" style="pointer-events:none;display:none"/>`;
-    if (mine) g += `<polygon points="${hex(cx, cy)}" fill="none" stroke="var(--ink)" stroke-width="3" style="pointer-events:none"/><text x="${cx}" y="${cy + 4}" text-anchor="middle" style="fill:var(--ink);stroke:var(--surface);stroke-width:3px;paint-order:stroke;font-weight:700;font-size:12px;pointer-events:none">You</text>`;
-    if (zone === 2) g += `<text x="${cx - hw / 2}" y="${cy + r + 13}">C${String(c.circuit_n).padStart(2, "0")}</text>`;
+  const W = Math.max(280, el.clientWidth || 480);
+  // One block per circuit (2x2 neighborhoods), ordered by substation so neighbors sit together.
+  const circuits = {};
+  S.map.forEach((c, i) => { (circuits[c.circuit] = circuits[c.circuit] || { sub: c.substation || "", n: c.circuit_n, cells: [] }).cells.push(i); });
+  const order = Object.keys(circuits).sort((a, b) => (circuits[a].sub + "").localeCompare(circuits[b].sub + "", undefined, { numeric: true }) || circuits[a].n - circuits[b].n);
+  const cols = Math.max(4, Math.ceil(Math.sqrt(order.length * 1.6)));
+  const gapB = 8, labelH = order.length > 40 ? 4 : 14;
+  const s = Math.max(6, Math.min(22, Math.floor((W / cols - gapB - 2) / 2)));
+  const bw = 2 * s + 2, bh = 2 * s + 2 + labelH;
+  let g = "";
+  order.forEach((cid, k) => {
+    const bx = (k % cols) * (bw + gapB), by = Math.floor(k / cols) * (bh + gapB) + 14;
+    circuits[cid].cells.forEach(i => {
+      const c = S.map[i], x = bx + (c.zone % 2) * (s + 2), y = by + Math.floor(c.zone / 2) * (s + 2);
+      const fill = c.band ? BAND[c.band] : "var(--risk-none)";
+      g += `<rect class="cell" data-i="${i}" x="${x}" y="${y}" width="${s}" height="${s}" rx="2" fill="${fill}" style="cursor:pointer"/>`;
+      g += `<rect class="out" data-i="${i}" x="${x + 1}" y="${y + 1}" width="${s - 2}" height="${s - 2}" rx="2" fill="none" stroke="var(--critical)" stroke-width="2" style="pointer-events:none;display:none"/>`;
+      if (S.persona && S.persona.premise_id === c.premise_id) {
+        g += `<rect x="${x - 2}" y="${y - 2}" width="${s + 4}" height="${s + 4}" rx="3" fill="none" stroke="var(--ink)" stroke-width="2.5" style="pointer-events:none"/>`;
+        g += `<text x="${bx + s + 1}" y="${by - 4}" text-anchor="middle" style="fill:var(--ink);font-weight:700;font-size:11px">You</text>`;
+      }
+    });
+    if (labelH > 4) g += `<text x="${bx + s + 1}" y="${by + 2 * s + 13}" text-anchor="middle" style="font-size:10px">${esc(cid)}</text>`;
   });
-  const defs = `<defs><pattern id="nodata" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" fill="var(--risk-none)"/><line x1="0" y1="0" x2="0" y2="6" stroke="var(--muted)" stroke-width="1.5"/></pattern></defs>`;
-  el.innerHTML = `<svg width="100%" viewBox="0 0 ${W} ${maxY}" role="img" aria-label="Outage risk by area">${defs}${g}</svg>`;
+  const H = Math.ceil(order.length / cols) * (bh + gapB) + 14;
+  el.innerHTML = `<svg width="100%" viewBox="0 0 ${W} ${H}" role="img" aria-label="Outage risk by neighborhood for ${order.length} circuits">${g}</svg>`;
   el.querySelectorAll(".cell").forEach(p => {
     const c = S.map[+p.dataset.i];
     p.addEventListener("mouseenter", e => {
-      const win = c.outage_windows.length ? `\nIn the replayed storm: out ${clockAt(Math.min(...c.outage_windows.map(w => w[0])))}–${clockAt(Math.max(...c.outage_windows.map(w => w[1])))}` : "\nNo damage in the replayed storm";
-      showTip(e, `Circuit ${c.circuit_n}, area ${p.dataset.i % 4 + 1}\nRisk: ${c.band ? c.band + " (" + Math.round(c.probability * 100) + "%)" : "not enough data"}${win}`);
+      const win = c.outage_windows.length ? `\nIn the replayed storm: out ${clockAt(Math.min(...c.outage_windows.map(w => w[0])))}–${clockAt(Math.max(...c.outage_windows.map(w => w[1])))}` : "\nNo damage here in the replayed storm";
+      showTip(e, `Circuit ${c.circuit}, neighborhood ${c.zone + 1}\nRisk: ${c.band ? c.band + " (" + Math.round(c.probability * 100) + "%)" : "not enough history"}${win}\nClick to view as a customer here`);
     });
     p.addEventListener("mousemove", moveTip);
     p.addEventListener("mouseleave", hideTip);
     p.addEventListener("click", () => {
+      hideTip();
       const known = S.personas.findIndex(x => x.premise_id === c.premise_id);
-      const persona = known >= 0 ? S.personas[known] : { name: `Circuit ${c.circuit_n} area`, premise_id: c.premise_id, declared_needs: [] };
+      const persona = known >= 0 ? S.personas[known] : { name: `A customer on ${c.circuit}`, premise_id: c.premise_id, declared_needs: [] };
       if (known < 0) {
         S.personas.push(persona);
         $("persona").insertAdjacentHTML("beforeend", `<option value="${S.personas.length - 1}">${esc(persona.name)}</option>`);
@@ -653,8 +727,8 @@ function renderMap() {
     });
   });
   $("map-legend").innerHTML = ["Low", "Elevated", "High", "Severe"].map(b => `<span><span class="sw" style="background:${BAND[b]}"></span>${b}</span>`).join("")
-    + `<span><span class="sw" style="background:url(#);background:repeating-linear-gradient(45deg,var(--risk-none) 0 3px,var(--muted) 3px 4px)"></span>Not enough data</span>`
-    + `<span><span class="sw" style="border:2px dashed var(--critical);background:none"></span>Power out (replay)</span>`;
+    + `<span><span class="sw" style="background:var(--risk-none)"></span>Not enough history</span>`
+    + `<span><span class="sw" style="border:2px solid var(--critical);background:none"></span>No power right now</span>`;
   paintMapOutages();
 }
 function paintMapOutages() {
@@ -675,7 +749,7 @@ async function loadStrip() {
   $("tiles").innerHTML = `
     <div class="tile"><div class="k">Real time inside our range</div><div class="v">${pct(s.coverage)}</div><div class="d">target 80% · ${s.cases} outages · each storm left out in turn</div></div>
     <div class="tile"><div class="k">We said too soon</div><div class="v">${pct(s.too_optimistic)}</div><div class="d">${S.calibrated ? "was " + pct(raw.too_optimistic) + " before calibration" : "the costly mistake"}</div></div>
-    <div class="tile"><div class="k">Typical range width</div><div class="v">${s.median_range_width_h} h</div><div class="d">${S.calibrated ? "was " + raw.median_range_width_h + " h: honesty costs precision" : "narrow but often wrong"}</div></div>`;
+    <div class="tile"><div class="k">Typical range width</div><div class="v">${dur(s.median_range_width_h)}</div><div class="d">${S.calibrated ? "was " + dur(raw.median_range_width_h) + ": honesty costs precision" : "narrow but often wrong"}</div></div>`;
   renderStrip();
   renderPerStorm();
 }
@@ -684,7 +758,7 @@ function renderPerStorm() {
   const pct = v => v == null ? "–" : Math.round(v * 100) + "%";
   $("per-storm").innerHTML = `<table><tr><th>Storm</th><th>Damage reports</th><th>Outages</th><th>Inside range</th><th>Typical width</th></tr>`
     + rows.map(r => { const s = S.calibrated ? r.calibrated : r.raw;
-        return `<tr><td>${esc(r.date || r.storm)}${r.thin_history ? " ⚠" : ""}</td><td>${r.damage_reports}</td><td>${s.cases}</td><td>${pct(s.coverage)}</td><td>${s.median_range_width_h ?? "–"} h</td></tr>`; }).join("")
+        return `<tr><td>${esc(r.date || r.storm)}${r.thin_history ? " ⚠" : ""}</td><td>${r.damage_reports}</td><td>${s.cases}</td><td>${pct(s.coverage)}</td><td>${dur(s.median_range_width_h)}</td></tr>`; }).join("")
     + `</table>` + (rows.some(r => r.thin_history) ? `<div class="caveat">⚠ We had few past storms this size to learn from, so its ranges are marked low confidence.</div>` : "");
 }
 function renderStrip() {
@@ -692,11 +766,15 @@ function renderStrip() {
   if (!stripCases.length) return;
   const W = Math.max(300, el.clientWidth || 480), H = 200, m = { l: 36, r: 8, t: 8, b: 20 };
   const cases = stripCases.slice().sort((a, b) => a.p50 - b.p50);
-  const yMax = 48;
+  const tops = cases.map(c => Math.max(c.actual, c.p50)).sort((a, b) => a - b);
+  const q = tops[Math.floor(tops.length * 0.95)] || 48;
+  const yStep = q > 240 ? 72 : q > 96 ? 24 : 12;
+  const yMax = Math.max(24, Math.ceil(q / yStep) * yStep);
+  const fmtH = v => v >= 72 ? Math.round(v / 24) + "d" : v + "h";
   const x = i => m.l + (i + 0.5) / cases.length * (W - m.l - m.r);
   const y = h => m.t + (1 - Math.min(h, yMax) / yMax) * (H - m.t - m.b);
   let g = "";
-  for (let v = 0; v <= yMax; v += 12) g += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(v)}" y2="${y(v)}" stroke="var(--grid)"/><text x="${m.l - 6}" y="${y(v) + 4}" text-anchor="end">${v}h</text>`;
+  for (let v = 0; v <= yMax; v += yStep) g += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(v)}" y2="${y(v)}" stroke="var(--grid)"/><text x="${m.l - 6}" y="${y(v) + 4}" text-anchor="end">${fmtH(v)}</text>`;
   g += `<text x="${m.l}" y="${H - 4}">Each column is one outage, sorted by our estimate</text>`;
   const bw = Math.max(1.5, Math.min(3, (W - m.l - m.r) / cases.length - 1));
   cases.forEach((c, i) => {

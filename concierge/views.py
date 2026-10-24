@@ -29,10 +29,14 @@ def risk_map(ds: Dataset | None = None) -> list[dict]:
     for p in ds.premises.itertuples():
         reps.setdefault(p.hex_id, p.premise_id)
     out = []
+    subs = dict(zip(ds.circuits.circuit_id, ds.circuits.substation_id))
     for hex_id, pid in sorted(reps.items()):
         r = predict(pid, ds=ds)
         circuit_n = int(hex_id.split("-")[1])
-        out.append({"cell": hex_id, "circuit_n": circuit_n, "zone": int(hex_id.split("-")[2]) - 11,
+        rf = hex_id.split("-")[2]
+        cid = ds.circuit_of(pid)
+        out.append({"cell": hex_id, "circuit_n": circuit_n, "circuit": cid, "substation": subs.get(cid),
+                    "zone": (int(rf[0]) - 1) * 2 + (int(rf[1]) - 1),
                     "premise_id": pid, "band": r.get("band"), "probability": r.get("probability"),
                     "status": r["status"]})
     return out

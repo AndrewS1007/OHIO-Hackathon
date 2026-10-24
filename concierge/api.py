@@ -47,7 +47,12 @@ def web_view():
 @app.get("/api")
 def index():
     ds = get_dataset()
+    from .config import DATA_DIR, REAL_DIR
+    ev = ds.current_storm.get("replay_of_event")
+    replay_row = ds.storms.loc[ds.storms.event_id == ev]
     return {"service": "AI Outage Concierge", "phase": service.WORLD.phase, "storm": ds.current_storm,
+            "data_source": "real" if DATA_DIR.resolve() == REAL_DIR.resolve() else "demo",
+            "replay_storm": {"name": replay_row["name"].iloc[0], "date": str(replay_row.start_time.iloc[0].date())} if len(replay_row) else None,
             "demo_premises": {c["name"]: c["premise_id"] for c in ds.customers}}
 
 
