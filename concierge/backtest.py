@@ -34,7 +34,7 @@ from .replay import actual_restore_h, event_records, scenario_at, system_reports
 from .restoration import MIN_BUCKET_CASES, apply_calibration, estimate, pick_calibration, prestorm_scenario, storm_size
 
 CACHE_DIR = ROOT / ".cache"
-CACHE_VERSION = "2"  # bump when the restoration engine changes in a way that changes estimates
+CACHE_VERSION = "4"  # bump when the restoration engine changes in a way that changes estimates
 
 
 # ---------- cases (cached to disk: ~100 s on the real data) ----------
@@ -158,6 +158,20 @@ def leave_one_storm_out(ds: Dataset | None = None) -> tuple[pd.DataFrame, pd.Dat
     return pd.concat(raw_parts), pd.concat(cal_parts)
 
 
+def calibration_helps(raw: dict, cal: dict, target: float = 0.8) -> bool:
+    """Use calibration only if, on storms it never saw, it lands closer to the target coverage."""
+    if raw.get("coverage") is None or cal.get("coverage") is None:
+        return False
+    return abs(cal["coverage"] - target) < abs(raw["coverage"] - target)
+
+
+@lru_cache(maxsize=1)
+def live_calibration(ds: Dataset | None = None) -> dict | None:
+    """What the live app applies: the size-aware calibration, or nothing if it didn't help."""
+    ds = ds or get_dataset()
+    return calibration(ds) if run(ds)["uses_calibration"] else None
+
+
 @lru_cache(maxsize=1)
 def calibration(ds: Dataset | None = None) -> dict:
     """What the live app uses: calibration learned from ALL past storms, by size."""
@@ -185,14 +199,17 @@ def run(ds: Dataset | None = None) -> dict:
             "thin_history": bool(part.thin_history.mean() > 0.5),
         })
     per_storm.sort(key=lambda r: -r["damage_reports"])
-    per_circuit = cal.groupby("circuit_id").agg(cases=("inside", "size"), inside=("inside", "sum")).reset_index()
     model = calibration(ds)
-    cal_summary = _summary(cal)
+    cal_summary, raw_summary = _summary(cal), _summary(raw)
+    use_cal = calibration_helps(raw_summary, cal_summary)
+    in_use = cal if use_cal else raw  # what customers are actually shown
+    per_circuit = in_use.groupby("circuit_id").agg(cases=("inside", "size"), inside=("inside", "sum")).reset_index()
     return {
         "method": "leave-one-storm-out",
-        "raw_on_test": _summary(raw),
+        "raw_on_test": raw_summary,
         "calibrated_on_test": cal_summary,
-        "coverage": cal_summary["coverage"],
+        "uses_calibration": use_cal,
+        "coverage": (cal_summary if use_cal else raw_summary)["coverage"],
         "per_storm": per_storm,
         "per_circuit": [{"circuit_id": r["circuit_id"], "inside": int(r["inside"]), "cases": int(r["cases"])}
                         for r in per_circuit.to_dict("records")],

@@ -87,7 +87,7 @@ def replay_with_texts(premise_id: str, customer: dict, what_if: dict | None = No
     """Replay timeline + the exact texts the customer would have received."""
     ds = ds or get_dataset()
     ev = _replay_event(ds)
-    tl = replay.timeline(premise_id, ev, customer=customer, what_if=what_if, calib=backtest.calibration(ds), ds=ds)
+    tl = replay.timeline(premise_id, ev, customer=customer, what_if=what_if, calib=backtest.live_calibration(ds), ds=ds)
     cust = copy.deepcopy(customer)
     for e in tl["events"]:
         world = service.World("outage", e["t"], dict(what_if or {}))

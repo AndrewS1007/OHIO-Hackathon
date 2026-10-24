@@ -150,7 +150,11 @@ def test_web_view_endpoints():
     assert late > [s for s in base["steps"] if s["t"] == 7][0]["p50"]  # fewer crews -> later
     raw = c.get("/api/backtest/cases?calibrated=false").json()
     cal = c.get("/api/backtest/cases").json()
-    assert sum(x["inside"] for x in cal) > sum(x["inside"] for x in raw)
+    assert len(raw) == len(cal) > 0
+    bt = c.get("/api/backtest").json()  # the app uses whichever version lands closer to 80%
+    chosen = bt["calibrated_on_test"] if bt["uses_calibration"] else bt["raw_on_test"]
+    other = bt["raw_on_test"] if bt["uses_calibration"] else bt["calibrated_on_test"]
+    assert abs(chosen["coverage"] - 0.8) <= abs(other["coverage"] - 0.8)
 
 
 # ---------- AI concierge ----------
@@ -258,3 +262,23 @@ def test_thin_history_falls_back_and_says_so():
 def test_backtest_is_cached_to_disk():
     files = list(backtest.CACHE_DIR.glob("backtest_cases_*.csv"))
     assert files, "first run should write the cache"
+
+
+# ---------- crew waits learned from past storms ----------
+
+from concierge.restoration import fit_start_delays
+
+
+def test_learned_waits_leave_the_predicted_storm_out():
+    all_waits = fit_start_delays(DS)
+    without = fit_start_delays(DS, exclude_event="E07")
+    n_e07 = int((DS.damage.event_id == "E07").sum())
+    assert len(all_waits) - len(without) == n_e07  # E07's own repairs aren't used to predict E07
+    assert (without >= 0).all()
+
+
+def test_fewer_crews_means_longer_wait():
+    from concierge.replay import scenario_at
+    p = MARIA["premise_id"]
+    p50 = lambda w: estimate(p, scenario_at(DS, p, "E07", 7.0, w), n_sims=400, seed=1)["hours_from_now"]["p50"]
+    assert p50({"crews": 1}) > p50(None) > p50({"crews": 5})

@@ -11,7 +11,7 @@ RULES = [
     ("R3", "Channel: SMS by default. A declared medical need adds a voice call. Battery mode keeps only essential texts."),
     ("R4", "Escalate: if a declared device's battery runs out before our P90 restoration time, place a check-in call; no answer in 15 min goes to a human."),
     ("R5", "Escalate: any declared medical need with P90 over 8 h gets human outreach."),
-    ("R6", "Send an 'estimate updated' text when P50 moves by 1 h or more, or the range crosses a declared battery limit."),
+    ("R6", "Send an 'estimate updated' text when there's a concrete reason (damage found or fixed, crews changed) and the likely time moves by 1 h or 10% of the wait, whichever is more; without a concrete reason, only when it moves by a quarter of the window. Always when the range crosses a declared battery limit."),
     ("R7", "When we can't predict reliably, a human reviews the message before it goes out."),
 ]
 
@@ -68,8 +68,9 @@ def should_send_update(prev: dict | None, new: dict, customer: dict, outage_star
         return False, "no estimate"
     if not prev or prev.get("status") != "ok":
         return True, "first estimate"
-    if abs(_abs(prev, "p50") - _abs(new, "p50")) >= 1:
-        return True, "P50 moved by 1 h or more"
+    remaining = max(new["hours_from_now"]["p50"], 0.0)
+    if abs(_abs(prev, "p50") - _abs(new, "p50")) >= max(1.0, 0.1 * remaining):
+        return True, "likely time moved by 1 h or 10% of the wait"
     for n in customer.get("declared_needs", []):
         bh = n.get("battery_hours")
         if bh is not None:
@@ -78,6 +79,12 @@ def should_send_update(prev: dict | None, new: dict, customer: dict, outage_star
             if before != after:
                 return True, f"range crossed the {n['need']} battery limit"
     return False, "no meaningful change"
+
+
+def vague_move_is_big(prev: dict, new: dict) -> bool:
+    """With no concrete reason to point to, only text if the likely time moved by a quarter of the window."""
+    h = new["hours_from_now"]
+    return abs(_abs(prev, "p50") - _abs(new, "p50")) >= max(2.0, 0.25 * (h["p90"] - h["p10"]))
 
 
 def allowed_in_battery_mode(kind: str) -> bool:

@@ -74,7 +74,7 @@ def risk_for(customer: dict, ds: Dataset | None = None) -> dict:
 def restoration_for(customer: dict, world: World = WORLD, ds: Dataset | None = None):
     ds = ds or get_dataset()
     pid = customer["premise_id"]
-    calib = backtest.calibration(ds)
+    calib = backtest.live_calibration(ds)
     if world.phase == "pre_storm":
         sc = prestorm_scenario(pid, ds.current_storm, ds)
         if world.what_if.get("crews"):
@@ -210,7 +210,7 @@ def proactive(session: Session, world: World = WORLD, ds: Dataset | None = None)
     else:
         ok, _ = rules.should_send_update(session.last_sent, est, c, outage_start_h=start)
         reasons = explain_change(session.last_scenario, sc, c["premise_id"], ds) if session.last_scenario else []
-        if ok and (reasons or abs((est["now_h"] + est["hours_from_now"]["p50"]) - (session.last_sent["now_h"] + session.last_sent["hours_from_now"]["p50"])) >= 2):
+        if ok and (reasons or rules.vague_move_is_big(session.last_sent, est)):
             send("estimate_updated", est=est, extra={"reasons_changed": reasons or ["damage assessment is further along"]})
             session.last_sent, session.last_scenario = est, sc
     plan = rules.alert_plan(c, risk_for(c, ds), est, hours_already_out=world.t_h - start)

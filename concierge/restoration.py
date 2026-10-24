@@ -2,7 +2,9 @@
 
 Monte Carlo over crew schedules. Each run:
   1. job hours = (labor hours x quantity + access adders) x indirect multipliers x access x noise
-  2. jobs can't start until assessed (1-3 h after they're reported)
+  2. jobs can't start until a crew gets to them: the wait from report to start
+     is drawn from what past storms' records show (backlog, dispatch, materials,
+     travel), learned without the storm being predicted; 1-3 h if no history
   3. not-yet-found damage is added at random (fewer as the storm ages)
   4. crews take jobs critical-facility first, then upstream first (step restoration)
   5. this premise is back when every job on its upline path is done
@@ -59,6 +61,9 @@ class Scenario:
     hidden_lambda: float = 1.0  # expected not-yet-found damage jobs on the circuit
     jobs: list[Job] = field(default_factory=list)
     system_reports: int | None = None  # damage reports so far across the whole system (storm size, known live)
+    start_delays: np.ndarray | None = None  # past report-to-work-start waits (hours) to sample from
+    crews_baseline: int | None = None  # crews as recorded/assumed, before any what-if
+    known_out: bool = False  # we know this customer is without power right now (meters, calls)
 
 
 def damage_label(damage_type: str, n: int) -> str:
@@ -113,22 +118,40 @@ def simulate(premise_id: str, sc: Scenario, n_sims: int = 1000, seed: int = 0, d
     r_report = np.array([j.report_h for j in jobs])
     r_done = np.array([j.done for j in jobs], dtype=bool)
     r_on_path = np.array([j.device_id in path_set for j in jobs], dtype=bool)
+    path_dev_idx = np.flatnonzero(c_on_path & (c_depth >= 1))
+    force_path = sc.known_out and not (r_on_path & ~r_done).any() and len(path_dev_idx) > 0
     restore, stage1, any_on_path = [], [], 0
     for _ in range(n_sims):
         # Schedule the whole storm from its start (done jobs included, since they used
         # crew time), so an estimate counts down on its own as hours pass.
         k = rng.poisson(sc.hidden_lambda)
         dev_i = rng.integers(len(c_devs), size=k)
+        if force_path:
+            # They're out but nothing open is reported on their line yet: the cause is still
+            # to be found, somewhere on their path. Add it, reported now.
+            k += 1
+            dev_i = np.append(dev_i, path_dev_idx[rng.integers(len(path_dev_idx))])
         depth = np.concatenate([r_depth, c_depth[dev_i]])
         is_prio = np.concatenate([r_prio, c_prio[dev_i]])
         hours = np.concatenate([r_hours, hidden_hours[rng.integers(len(hidden_types), size=k)]])
         report = np.concatenate([r_report, sc.now_h + rng.uniform(0.5, 6, size=k)])
         done = np.concatenate([r_done, np.zeros(k, dtype=bool)])
         on_path = np.concatenate([r_on_path, c_on_path[dev_i]])
-        avail = report + rng.uniform(1, 3, size=len(report))
+        learned = sc.start_delays is not None and len(sc.start_delays) > 0
+        if learned:
+            # Repairs on one circuit in one storm wait similar amounts: one shared draw per run,
+            # plus a little spread (records only have dates, so +-12 h is within the noise).
+            wait = np.clip(rng.choice(sc.start_delays) + rng.uniform(-12, 12, size=len(report)), 0, None)
+            # Fewer crews than usual -> longer waits (and more crews -> shorter).
+            wait = wait * (max(1, sc.crews_baseline or sc.crews) / max(1, sc.crews))
+        else:
+            wait = rng.uniform(1, 3, size=len(report))
+        avail = report + wait
         dur = hours * sc.access * rng.lognormal(0, NOISE_SIGMA, size=len(report))
         order = np.lexsort((avail, depth, ~is_prio))  # critical facility first, then upstream first
-        finish = _schedule(order, avail, dur, max(1, sc.crews), 0.0)
+        # Learned waits already include queuing for a crew, so don't queue twice.
+        n_crews = len(report) if learned else max(1, sc.crews)
+        finish = _schedule(order, avail, dur, n_crews, 0.0)
         # An open job the schedule says "should be done" isn't: it's running late.
         late = ~done & (finish <= sc.now_h)
         finish[late] = sc.now_h + rng.exponential(1.0, size=int(late.sum()))
@@ -164,9 +187,13 @@ def drivers(premise_id: str, sc: Scenario, ds: Dataset | None = None) -> list[st
         groups[key] += j.quantity
         hours[key] += _job_hours(ds, j)
     out = [f"{damage_label(dt, n)} {WHERE_WORDS[dev]}" for (dt, dev), n in sorted(groups.items(), key=lambda kv: -hours[kv[0]])]
+    if sc.known_out and not groups:
+        out.insert(0, "crews haven't found the damage affecting you yet")
     other = sum(1 for j in sc.jobs if not j.done and j.device_id not in path)
     if other:
         out.append(f"{sc.crews} crew{'s' if sc.crews != 1 else ''} also fixing {other} other repair{'s' if other != 1 else ''} on your circuit")
+    if sc.start_delays is not None and len(sc.start_delays) and float(np.median(sc.start_delays)) >= 6:
+        out.append(f"in past storms, a repair like this usually waited about {round(float(np.median(sc.start_delays)))} h for a crew")
     if sc.access > 1.0:
         out.append("blocked or flooded roads are slowing crews")
     cid = ds.circuit_of(premise_id)
@@ -268,6 +295,29 @@ def jobs_from_records(records) -> list[Job]:
                 incident_id=r.incident_id, extra_hours=float(getattr(r, "extra_hours", 0.0))) for r in records.itertuples()]
 
 
+MIN_DELAY_RECORDS = 20  # fewer past repairs than this -> keep the simple 1-3 h assumption
+
+
+def fit_start_delays(ds: Dataset, exclude_event: str | None = None) -> np.ndarray | None:
+    """How long past repairs waited for a crew: (repaired - reported) minus the repair work itself.
+
+    exclude_event leaves one storm out, so an estimate for that storm (in the backtest
+    or the replay) never learns from the storm it's predicting."""
+    cache = ds.__dict__.setdefault("_start_delays", {})
+    if exclude_event in cache:
+        return cache[exclude_event]
+    d = ds.damage if exclude_event is None else ds.damage[ds.damage.event_id != exclude_event]
+    d = d[d.damage_type.isin(list(ds.labor_hours))]
+    out = None
+    if len(d) >= MIN_DELAY_RECORDS:
+        extra = d["extra_hours"] if "extra_hours" in d else 0.0
+        work = (d.damage_type.map(ds.labor_hours) * d.quantity + extra) * float(np.prod(list(ds.indirect.values())))
+        elapsed = (d.repair_complete_time - d.report_time).dt.total_seconds() / 3600
+        out = np.clip((elapsed - work).to_numpy(dtype=float), 0.0, None)
+    cache[exclude_event] = out
+    return out
+
+
 def prestorm_scenario(premise_id: str, storm: dict, ds: Dataset | None = None) -> Scenario:
     """Before the storm: no reported damage yet, so everything is 'not yet found'
     damage, sized from how much damage this circuit took in past storms of similar strength."""
@@ -279,4 +329,4 @@ def prestorm_scenario(premise_id: str, storm: dict, ds: Dataset | None = None) -
     # Crews: what this circuit had in those storms, if recorded; otherwise the wind-based assumption.
     crews = dmg.crew_count.dropna()
     crews = int(round(crews.median())) if len(crews) else default_crews(storm["max_wind_mph"])
-    return Scenario(crews=crews, hidden_lambda=max(1.0, per_storm))
+    return Scenario(crews=crews, crews_baseline=crews, hidden_lambda=max(1.0, per_storm), start_delays=fit_start_delays(ds))

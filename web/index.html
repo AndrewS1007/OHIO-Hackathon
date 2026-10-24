@@ -292,9 +292,10 @@ th, td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--grid
     <h2>Honesty scorecard</h2>
     <p class="lede">How often did the real restoration time land inside our range? Each storm is scored by a model trained on the other storms only.</p>
     <div class="seg" id="calib" style="margin-bottom:10px">
-      <button data-v="0" aria-pressed="false">Before calibration</button>
-      <button data-v="1" aria-pressed="true">After calibration</button>
+      <button data-v="0" aria-pressed="false">Raw model</button>
+      <button data-v="1" aria-pressed="true">With calibration</button>
     </div>
+    <div class="caveat" id="calib-note" style="margin:-4px 0 10px"></div>
     <div class="tiles" id="tiles"></div>
     <div id="strip"></div>
     <div class="legend">
@@ -345,6 +346,14 @@ async function init() {
   const [personas, map, bt, rules, info] = await Promise.all([
     api("/api/customers"), api("/api/map"), api("/api/backtest"), api("/api/rules"), api("/api")]);
   S.personas = personas; S.map = map; S.backtest = bt;
+  S.calibrated = !!bt.uses_calibration;
+  document.querySelectorAll("#calib button").forEach(b => {
+    b.setAttribute("aria-pressed", (b.dataset.v === "1") === S.calibrated);
+    if ((b.dataset.v === "1") === S.calibrated) b.textContent += " · in use";
+  });
+  $("calib-note").textContent = bt.uses_calibration
+    ? "The app adds a calibration step, because on storms it never saw, that got closer to 80%."
+    : "The app uses the raw model: on storms it never saw, calibration didn't get closer to 80%, it only made ranges wider.";
   const st = info.storm;
   $("storm-chip").textContent = `${st.name} · ${st.max_wind_mph} mph winds · arrives Sun 2pm`;
   S.info = info;
@@ -748,8 +757,8 @@ async function loadStrip() {
   const pct = v => Math.round(v * 100) + "%";
   $("tiles").innerHTML = `
     <div class="tile"><div class="k">Real time inside our range</div><div class="v">${pct(s.coverage)}</div><div class="d">target 80% · ${s.cases} outages · each storm left out in turn</div></div>
-    <div class="tile"><div class="k">We said too soon</div><div class="v">${pct(s.too_optimistic)}</div><div class="d">${S.calibrated ? "was " + pct(raw.too_optimistic) + " before calibration" : "the costly mistake"}</div></div>
-    <div class="tile"><div class="k">Typical range width</div><div class="v">${dur(s.median_range_width_h)}</div><div class="d">${S.calibrated ? "was " + dur(raw.median_range_width_h) + ": honesty costs precision" : "narrow but often wrong"}</div></div>`;
+    <div class="tile"><div class="k">We said too soon</div><div class="v">${pct(s.too_optimistic)}</div><div class="d">${S.calibrated ? "raw model: " + pct(raw.too_optimistic) : "the costly mistake"}</div></div>
+    <div class="tile"><div class="k">Typical range width</div><div class="v">${dur(s.median_range_width_h)}</div><div class="d">${S.calibrated ? "raw model: " + dur(raw.median_range_width_h) : "with calibration: " + dur(S.backtest.calibrated_on_test.median_range_width_h)}</div></div>`;
   renderStrip();
   renderPerStorm();
 }

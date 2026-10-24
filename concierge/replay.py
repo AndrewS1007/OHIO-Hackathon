@@ -11,8 +11,8 @@ import math
 import pandas as pd
 
 from .data import Dataset, get_dataset
-from .restoration import Job, Scenario, default_crews, estimate, explain_change, prestorm_scenario
-from .rules import should_send_update
+from .restoration import fit_start_delays, Job, Scenario, default_crews, estimate, explain_change, prestorm_scenario
+from .rules import should_send_update, vague_move_is_big
 
 
 def event_records(ds: Dataset, event_id: str, circuit_id: str) -> pd.DataFrame:
@@ -44,12 +44,22 @@ def scenario_at(ds: Dataset, premise_id: str, event_id: str, t: float, what_if: 
         jobs.append(Job(fuse, "pole_replace", int(what_if["extra_poles"]), found_at, source="what_if", incident_id="what_if_poles"))
     # The real ARCOS extract has no crew counts, so fall back to the challenge assumption.
     crews = int(known.crew_count.iloc[0]) if len(known) and pd.notna(known.crew_count.iloc[0]) else default_crews(storm.max_wind_mph)
+    crews_recorded = crews
     crews = int(what_if.get("crews", crews))
     if base_lambda is None:
         base_lambda = prestorm_scenario(premise_id, {"max_wind_mph": storm.max_wind_mph}, ds).hidden_lambda
     return Scenario(crews=crews, access=float(what_if.get("access", 1.0)), now_h=t,
                     hidden_lambda=hidden_lambda(base_lambda, len(known), t), jobs=jobs,
-                    system_reports=system_reports(ds, event_id, t))
+                    system_reports=system_reports(ds, event_id, t),
+                    start_delays=fit_start_delays(ds, exclude_event=event_id), crews_baseline=crews_recorded,
+                    known_out=_is_out(ds, premise_id, recs, t))
+
+
+def _is_out(ds: Dataset, premise_id: str, recs: pd.DataFrame, t: float) -> bool:
+    """Is this customer without power at hour t? Live, a utility knows this from meters and
+    calls (not from when repairs will finish), so the replay may use it."""
+    on_path = recs.loc[recs.device_id.isin(ds.path(premise_id))]
+    return bool(len(on_path)) and float(on_path.report_h.min()) <= t < float(on_path.done_h.max())
 
 
 def _event_report_hours(ds: Dataset, event_id: str):
@@ -95,7 +105,8 @@ def timeline(premise_id: str, event_id: str, customer: dict | None = None, what_
     t = math.floor(out_h)
     while t < back_h:
         sc = scenario_at(ds, premise_id, event_id, t, what_if, recs, base_lambda)
-        est = estimate(premise_id, sc, n_sims=n_sims, seed=int(t * 10), ds=ds, calib=calib)
+        # Same random numbers every hour, so the estimate moves only when the facts change.
+        est = estimate(premise_id, sc, n_sims=n_sims, seed=7, ds=ds, calib=calib)
         if est["status"] == "ok":
             h = est["hours_from_now"]
             steps.append({"t": t, "p10": round(t + h["p10"], 1), "p50": round(t + h["p50"], 1), "p90": round(t + h["p90"], 1)})
@@ -105,7 +116,7 @@ def timeline(premise_id: str, event_id: str, customer: dict | None = None, what_
             else:
                 send, rule_why = should_send_update(prev_est, est, customer, outage_start_h=out_h)
                 reasons = explain_change(prev_sc, sc, premise_id, ds)
-                if send and not reasons and abs(_p50_abs(prev_est) - _p50_abs(est)) < 2:
+                if send and not reasons and not vague_move_is_big(prev_est, est) and "battery" not in rule_why:
                     send = False  # no concrete cause and a small move: don't spam
                 if send:
                     events.append({"t": t, "kind": "estimate_updated", "estimate": est, "rule": rule_why,

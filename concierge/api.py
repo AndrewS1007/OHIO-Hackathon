@@ -106,7 +106,7 @@ def get_backtest():
 def get_replay(event_id: str, premise_id: str, crews: int | None = None, extra_poles: int = 0):
     c = _customer(premise_id)
     what_if = {k: v for k, v in {"crews": crews, "extra_poles": extra_poles}.items() if v}
-    tl = replay.timeline(premise_id, event_id, customer=c, what_if=what_if or None, calib=backtest.calibration())
+    tl = replay.timeline(premise_id, event_id, customer=c, what_if=what_if or None, calib=backtest.live_calibration())
     for e in tl["events"]:
         e.pop("estimate", None)
     return tl
