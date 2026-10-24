@@ -261,7 +261,7 @@ def test_ollama_prefetches_status_so_one_call_answers(monkeypatch):
     from concierge import agent
     calls = []
 
-    def fake_chat(messages):
+    def fake_chat(messages, max_chars=None):
         calls.append(list(messages))
         tool = next(m for m in messages if m["role"] == "tool")
         assert tool["tool_name"] == "get_outage_status"

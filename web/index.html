@@ -3,824 +3,328 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Outage Concierge</title>
+<title>Outage Center</title>
+<link rel="stylesheet" href="/static/app.css">
 <style>
-:root {
-  color-scheme: light;
-  --page: #f9f9f7;
-  --surface: #fcfcfb;
-  --surface-2: #f0efec;
-  --ink: #0b0b0b;
-  --ink-2: #52514e;
-  --muted: #898781;
-  --grid: #e1e0d9;
-  --axis: #c3c2b7;
-  --border: rgba(11,11,11,0.10);
-  --series-1: #2a78d6;
-  --band-fill: rgba(42,120,214,0.16);
-  --strip: rgba(42,120,214,0.38);
-  --good: #0ca30c;
-  --good-text: #006300;
-  --warning: #fab219;
-  --serious: #ec835a;
-  --critical: #d03b3b;
-  /* risk bands: one-hue ordinal ramp (blue 250 / 400 / 550 / 700) */
-  --risk-low: #86b6ef;
-  --risk-elevated: #3987e5;
-  --risk-high: #1c5cab;
-  --risk-severe: #0d366b;
-  --risk-none: #e1e0d9;
-  --phone-bg: #f0efec;
-  --bubble: #ffffff;
+.wrap { max-width: 1320px; margin: 0 auto; padding: 20px 24px 40px; }
+.notices { display: grid; gap: 8px; margin-bottom: 16px; }
+.notices:empty { display: none; }
+.layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(380px, 46%); gap: 20px; align-items: start; }
+.col { display: grid; gap: 16px; }
+
+/* status hero */
+.hero { padding: 24px 26px; }
+.hero .state { margin-bottom: 14px; }
+.hero .big-label { color: var(--muted); font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+.hero .big { font-size: 40px; font-weight: 750; letter-spacing: -.02em; line-height: 1.1; margin: 4px 0 6px; }
+.hero .sub { font-size: 16px; color: var(--ink-2); }
+.hero .confirmed { display: flex; gap: 10px; align-items: center; background: var(--good-soft); color: var(--good);
+  border-radius: 12px; padding: 10px 14px; margin-top: 14px; font-weight: 600; }
+.hero .confirmed .tick { width: 22px; height: 22px; border-radius: 50%; background: var(--good); color: var(--surface);
+  display: grid; place-items: center; font-size: 13px; flex: none; }
+.why { margin: 16px 0 0; padding: 14px 0 0; border-top: 1px solid var(--line); }
+.why ul, .todo ul { margin: 6px 0 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+.why li { padding-left: 16px; position: relative; color: var(--ink-2); }
+.why li::before { content: ""; position: absolute; left: 2px; top: .62em; width: 6px; height: 6px; border-radius: 50%; background: var(--muted); }
+.meta { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 14px; font-size: 13px; color: var(--muted); }
+
+.todo li { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; }
+.todo li .box { width: 18px; height: 18px; flex: none; border: 2px solid var(--line); border-radius: 5px; margin-top: 2px; }
+.todo li.done .box { background: var(--good); border-color: var(--good); }
+.todo li.done span:last-child { color: var(--muted); text-decoration: line-through; }
+
+.timeline { display: grid; gap: 8px; margin-top: 8px; }
+.tl-row { display: grid; grid-template-columns: 64px 1fr auto; gap: 10px; align-items: center; }
+.tl-row .h { font-weight: 650; font-variant-numeric: tabular-nums; }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.safety { font-size: 13px; color: var(--ink-2); display: flex; gap: 8px; align-items: center; }
+
+/* chat */
+.chat { position: sticky; top: 76px; display: flex; flex-direction: column; height: calc(100vh - 100px); min-height: 560px; padding: 0; overflow: hidden; }
+.chat-h { display: flex; align-items: center; gap: 12px; padding: 16px 20px; border-bottom: 1px solid var(--line); }
+.chat-h .av { width: 38px; height: 38px; border-radius: 50%; background: var(--brand); color: var(--brand-ink); display: grid; place-items: center; font-size: 18px; flex: none; }
+.chat-h .t { font-weight: 700; font-size: 16px; }
+.msgs { flex: 1; overflow-y: auto; padding: 18px 20px; display: flex; flex-direction: column; gap: 12px; background: var(--surface-2); }
+.msg { max-width: 82%; padding: 10px 14px; border-radius: 16px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.msg.bot { background: var(--surface); border: 1px solid var(--line); border-bottom-left-radius: 5px; align-self: flex-start; }
+.msg.me { background: var(--brand); color: var(--brand-ink); border-bottom-right-radius: 5px; align-self: flex-end; }
+.msg.alert { background: var(--bad-soft); color: var(--bad); font-weight: 600; align-self: flex-start; border-bottom-left-radius: 5px; }
+.msg .how { margin-top: 6px; font-size: 12px; color: var(--muted); white-space: normal; font-weight: 400; }
+.typing { align-self: flex-start; color: var(--muted); font-size: 13px; padding: 4px 6px; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 20px 0; }
+.chip { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 6px 12px; font-size: 13px; cursor: pointer; }
+.chip:hover { border-color: var(--brand); color: var(--brand); }
+.ask { display: flex; gap: 10px; padding: 14px 20px 18px; }
+.ask input { flex: 1; padding: 12px 14px; border-radius: 12px; }
+.ask button { padding: 0 18px; border-radius: 12px; }
+
+/* sign-in */
+.signin { max-width: 460px; margin: 10vh auto; }
+.signin h1 { font-size: 24px; margin-bottom: 6px; }
+.acct { display: flex; justify-content: space-between; align-items: center; width: 100%; text-align: left; padding: 14px 16px; margin-top: 10px; }
+.acct b { display: block; }
+.menu { position: relative; }
+.menu-list { position: absolute; right: 0; top: calc(100% + 6px); background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+  box-shadow: var(--shadow); padding: 6px; min-width: 220px; display: none; z-index: 20; }
+.menu-list.on { display: block; }
+.menu-list button { display: block; width: 100%; text-align: left; border: 0; background: none; padding: 8px 10px; border-radius: 8px; cursor: pointer; }
+.menu-list button:hover { background: var(--surface-2); }
+.updated { font-size: 12px; color: var(--muted); }
+.fab { display: none; position: fixed; right: 16px; bottom: 16px; z-index: 30; border-radius: 999px; padding: 12px 18px; box-shadow: var(--shadow); }
+.skel { color: var(--muted); }
+
+@media (max-width: 980px) {
+  .layout { grid-template-columns: 1fr; }
+  .chat { position: static; height: 620px; scroll-margin-top: 70px; }
+  .fab { display: block; }
+  .fab[hidden] { display: none; }
+  .hero .big { font-size: 32px; }
 }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    color-scheme: dark;
-    --page: #0d0d0d; --surface: #1a1a19; --surface-2: #232321;
-    --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781; --grid: #2c2c2a; --axis: #383835;
-    --border: rgba(255,255,255,0.10);
-    --series-1: #3987e5; --band-fill: rgba(57,135,229,0.22); --strip: rgba(57,135,229,0.45);
-    --good-text: #0ca30c;
-    --risk-low: #184f95; --risk-elevated: #256abf; --risk-high: #3987e5; --risk-severe: #86b6ef; --risk-none: #2c2c2a;
-    --phone-bg: #111110; --bubble: #232321;
-  }
+@media (max-width: 560px) {
+  .wrap { padding: 14px 16px 30px; }
+  .topbar { padding: 10px 16px; }
+  .two { grid-template-columns: 1fr; }
+  .msg { max-width: 92%; }
+  .updated { display: none; }
 }
-:root[data-theme="dark"] {
-  color-scheme: dark;
-  --page: #0d0d0d; --surface: #1a1a19; --surface-2: #232321;
-  --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781; --grid: #2c2c2a; --axis: #383835;
-  --border: rgba(255,255,255,0.10);
-  --series-1: #3987e5; --band-fill: rgba(57,135,229,0.22); --strip: rgba(57,135,229,0.45);
-  --good-text: #0ca30c;
-  --risk-low: #184f95; --risk-elevated: #256abf; --risk-high: #3987e5; --risk-severe: #86b6ef; --risk-none: #2c2c2a;
-  --phone-bg: #111110; --bubble: #232321;
-}
-* { box-sizing: border-box; }
-body { margin: 0; background: var(--page); color: var(--ink); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
-header.top { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center; padding: 16px 24px; border-bottom: 1px solid var(--border); background: var(--surface); }
-header.top h1 { font-size: 18px; margin: 0; letter-spacing: -0.01em; }
-header.top .sub { color: var(--ink-2); font-size: 13px; }
-.spacer { flex: 1; }
-.chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; background: var(--surface-2); font-size: 13px; color: var(--ink-2); }
-select, button { font: inherit; color: var(--ink); }
-select { padding: 6px 8px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); }
-.clockbar { position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; padding: 10px 24px; background: var(--surface); border-bottom: 1px solid var(--border); }
-.clockbar input[type=range] { flex: 1; min-width: 180px; accent-color: var(--series-1); }
-.clock { font-variant-numeric: tabular-nums; font-weight: 600; min-width: 190px; }
-.phase { font-size: 12px; color: var(--ink-2); }
-button.play { width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--border); background: var(--surface-2); cursor: pointer; }
-main { display: grid; gap: 16px; padding: 16px 24px 40px; grid-template-columns: minmax(0, 1fr) 360px;
-  grid-template-areas: "h1 h1" "card phone" "tree phone" "h2 h2" "cone cone" "map honesty"; max-width: 1320px; margin: 0 auto; }
-@media (max-width: 980px) { main { grid-template-columns: minmax(0,1fr); grid-template-areas: "h1" "card" "phone" "tree" "h2" "cone" "map" "honesty"; padding: 12px 16px 32px; } .clockbar, header.top, .intro { padding-left: 16px; padding-right: 16px; } }
-.section-h { margin: 8px 2px -4px; }
-.section-h h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-2); margin: 0; }
-.section-h p { margin: 2px 0 0; font-size: 13px; color: var(--muted); }
-#c-map, #c-honesty { align-self: start; }
-#h1 { grid-area: h1; } #h2 { grid-area: h2; margin-top: 16px; }
-.intro { display: flex; flex-wrap: wrap; gap: 8px 22px; align-items: center; padding: 10px 24px; background: var(--surface-2); border-bottom: 1px solid var(--border); font-size: 13.5px; color: var(--ink-2); }
-.intro b { color: var(--ink); }
-.intro .num { display: inline-flex; width: 20px; height: 20px; border-radius: 50%; align-items: center; justify-content: center; background: var(--series-1); color: #fff; font-size: 12px; font-weight: 700; margin-right: 6px; }
-.intro .x { margin-left: auto; border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 18px; line-height: 1; }
-.jumps { display: flex; gap: 6px; flex-wrap: wrap; }
-.jumps button { font-size: 12.5px; padding: 5px 10px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface-2); cursor: pointer; }
-.jumps button[aria-current=true] { background: var(--ink); color: var(--surface); border-color: var(--ink); }
-.pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 2px 9px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface-2); color: var(--ink); margin-top: 2px; }
-.pill .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
-@media (max-width: 720px) {
-  .clockbar { gap: 6px 10px; padding-top: 8px; padding-bottom: 8px; }
-  .jumps { order: -1; width: 100%; flex-wrap: nowrap; overflow-x: auto; padding-bottom: 2px; }
-  .jumps button { flex: 0 0 auto; }
-  .clockbar input[type=range] { min-width: 0; flex: 1 1 120px; }
-  .clockbar > div:last-child { flex-basis: 100%; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-  .clock { min-width: 0; font-size: 13px; }
-  .pill { margin-top: 0; }
-  button.play { width: 32px; height: 32px; }
-}
-.who-line { color: var(--ink-2); font-size: 13px; margin: -6px 0 12px; }
-.card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 16px 18px; min-width: 0; }
-.card h2 { font-size: 15px; margin: 0 0 2px; }
-.card .lede { color: var(--ink-2); font-size: 13px; margin: 0 0 12px; }
-#c-card { grid-area: card; } #c-phone { grid-area: phone; } #c-cone { grid-area: cone; } #c-tree { grid-area: tree; } #c-map { grid-area: map; } #c-honesty { grid-area: honesty; }
-
-/* three lanes */
-.lanes { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 12px; }
-@media (max-width: 720px) { .lanes { grid-template-columns: 1fr; } }
-.lane { border-radius: 10px; padding: 12px; background: var(--surface-2); min-width: 0; }
-.lane .tag { font-size: 12px; font-weight: 600; color: var(--ink-2); display: flex; gap: 6px; align-items: center; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.04em; }
-.lane .big { font-size: 18px; font-weight: 600; margin: 2px 0 6px; }
-.lane ul { margin: 0; padding-left: 18px; color: var(--ink-2); font-size: 13px; }
-.lane li { margin: 2px 0; }
-.lane .note { color: var(--muted); font-size: 12px; margin-top: 6px; }
-
-/* phone */
-.phone { background: var(--phone-bg); border-radius: 28px; border: 1px solid var(--border); padding: 14px 12px; height: 600px; display: flex; flex-direction: column; }
-.phone .bar { text-align: center; font-size: 12px; color: var(--ink-2); padding-bottom: 8px; border-bottom: 1px solid var(--border); }
-.msgs { flex: 1; overflow-y: auto; padding: 10px 2px; display: flex; flex-direction: column; gap: 10px; }
-.bubble { background: var(--bubble); border: 1px solid var(--border); border-radius: 16px 16px 16px 4px; padding: 9px 11px; font-size: 13.5px; white-space: pre-wrap; max-width: 92%; }
-.bubble.new { outline: 2px solid var(--series-1); }
-.sysnote { align-self: center; max-width: 94%; font-size: 12.5px; color: var(--ink); background: var(--surface); border: 1px dashed var(--serious); border-radius: 10px; padding: 7px 10px; }
-.sysnote b { color: var(--ink); }
-.row-me { display: flex; flex-direction: column; align-items: flex-end; }
-.bubble.me { background: var(--series-1); color: #fff; border-color: transparent; border-radius: 16px 16px 4px 16px; }
-.bubble.ai { border-color: var(--series-1); }
-.who { font-size: 11px; font-weight: 600; color: var(--series-1); margin: 0 4px 3px; }
-.how { font-size: 12px; color: var(--ink-2); margin: 4px 4px 0; max-width: 92%; }
-.how summary { cursor: pointer; color: var(--ink-2); }
-.how ol { margin: 4px 0 0; padding-left: 18px; }
-.how li { margin: 2px 0; }
-.how .ok { color: var(--good-text); }
-.mode { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 999px; font-size: 11px; background: var(--surface); border: 1px solid var(--border); }
-.typing { color: var(--muted); font-size: 13px; padding: 4px 6px; }
-.chips { display: flex; gap: 6px; flex-wrap: wrap; padding: 8px 0 6px; border-top: 1px solid var(--border); }
-.chips button { flex: 0 0 auto; font-size: 12px; padding: 5px 9px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); cursor: pointer; }
-.ask { display: flex; gap: 6px; }
-.ask input { flex: 1; min-width: 0; font: inherit; font-size: 14px; padding: 9px 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); color: var(--ink); }
-.ask button { border: 0; border-radius: 999px; padding: 0 14px; background: var(--series-1); color: #fff; font-weight: 600; cursor: pointer; }
-.ask button:disabled { opacity: .5; cursor: default; }
-.meta { font-size: 11px; color: var(--muted); margin: 2px 4px 0; }
-.empty { color: var(--muted); font-size: 13px; text-align: center; margin: auto 0; }
-
-/* chart chrome */
-svg text { fill: var(--muted); font-size: 11px; font-family: inherit; }
-svg .ink { fill: var(--ink); } svg .ink2 { fill: var(--ink-2); }
-.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--ink-2); margin: 8px 0 0; }
-.legend .sw { display: inline-block; width: 14px; height: 10px; border-radius: 2px; vertical-align: -1px; margin-right: 6px; }
-.cone-wrap { display: grid; grid-template-columns: minmax(0,1fr) 220px; gap: 16px; }
-@media (max-width: 720px) { .cone-wrap { grid-template-columns: 1fr; } }
-.whatif { background: var(--surface-2); border-radius: 10px; padding: 12px; font-size: 13px; }
-.whatif h3 { font-size: 13px; margin: 0 0 8px; }
-.whatif label { display: block; margin: 10px 0 4px; color: var(--ink-2); }
-.whatif input[type=range] { width: 100%; accent-color: var(--series-1); }
-.seg { display: flex; gap: 4px; flex-wrap: wrap; }
-.seg button { padding: 4px 9px; border-radius: 7px; border: 1px solid var(--border); background: var(--surface); cursor: pointer; font-size: 12.5px; }
-.seg button[aria-pressed=true] { background: var(--ink); color: var(--surface); border-color: var(--ink); }
-.whatif .out { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); color: var(--ink-2); }
-.whatif .out b { color: var(--ink); }
-details { margin-top: 10px; font-size: 13px; color: var(--ink-2); }
-summary { cursor: pointer; }
-table { border-collapse: collapse; width: 100%; font-size: 12.5px; margin-top: 6px; }
-#per-storm td:first-child { white-space: nowrap; }
-th, td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--grid); font-variant-numeric: tabular-nums; }
-
-/* tree */
-.tree { display: flex; align-items: stretch; gap: 0; overflow-x: auto; padding-bottom: 4px; }
-.node { flex: 1 1 0; background: var(--surface-2); border-radius: 10px; padding: 10px; min-width: 104px; }
-.node h4 { margin: 0 0 6px; font-size: 13px; }
-.arrow { flex: 0 0 22px; display: flex; align-items: center; justify-content: center; color: var(--muted); }
-.arrow.dead { color: var(--critical); }
-.status { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--surface); border: 1px solid var(--border); color: var(--ink); }
-.status .dot { width: 8px; height: 8px; border-radius: 50%; }
-.items { list-style: none; padding: 0; margin: 8px 0 0; font-size: 12.5px; color: var(--ink-2); }
-.items li { margin: 3px 0; }
-.items li.fixed { text-decoration: line-through; color: var(--muted); }
-.hist { font-size: 11.5px; color: var(--muted); margin-top: 8px; }
-@media (max-width: 720px) { .tree { flex-direction: column; } .arrow { transform: rotate(90deg); height: 20px; } .node { min-width: 0; } }
-
-/* honesty */
-.tiles { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 10px; margin-bottom: 12px; }
-.tile { background: var(--surface-2); border-radius: 10px; padding: 10px; }
-.tile .k { font-size: 12px; color: var(--ink-2); }
-.tile .v { font-size: 24px; font-weight: 650; margin-top: 2px; }
-.tile .d { font-size: 12px; color: var(--muted); }
-.caveat { font-size: 12px; color: var(--muted); margin-top: 8px; }
-
-#tip { position: fixed; pointer-events: none; z-index: 20; background: var(--ink); color: var(--surface); font-size: 12.5px; padding: 7px 9px; border-radius: 8px; max-width: 280px; opacity: 0; transition: opacity .08s; white-space: pre-line; }
-.sr { position: absolute; left: -9999px; }
 </style>
 </head>
 <body>
-<header class="top">
-  <div>
-    <h1>Built for the Dark</h1>
-    <div class="sub">AI Outage Concierge · what a customer sees, hour by hour</div>
-  </div>
+<header class="topbar">
+  <div class="brand"><span class="mark" aria-hidden="true">⚡</span>Outage Center</div>
   <div class="spacer"></div>
-  <label class="chip">Viewing as
-    <select id="persona" aria-label="Customer to view as"></select>
-  </label>
-  <span class="chip" id="storm-chip">Loading storm…</span>
-  <span class="chip" id="data-chip"></span>
-</header>
-<div class="intro" id="intro">
-  <span><span class="num">1</span><b>Pick a customer</b> next to "Viewing as".</span>
-  <span><span class="num">2</span><b>Move through the storm</b> with the buttons below, or press ▶.</span>
-  <span><span class="num">3</span><b>Ask the concierge</b> anything in their phone.</span>
-  <button class="x" id="intro-x" aria-label="Hide these tips">×</button>
-</div>
-
-<div class="clockbar" role="group" aria-label="Storm clock">
-  <button class="play" id="play" aria-label="Play storm replay">▶</button>
-  <div class="jumps" id="jumps" aria-label="Jump to a moment"></div>
-  <input type="range" id="t" min="-18" max="24" step="0.5" value="-18" aria-label="Storm hour">
-  <div>
-    <div class="clock" id="clock">—</div>
-    <div class="pill" id="phase"><span class="dot"></span><span>—</span></div>
+  <span class="updated" id="updated"></span>
+  <div class="menu" id="acct-menu" hidden>
+    <button class="btn" id="acct-btn" aria-haspopup="true" aria-expanded="false"></button>
+    <div class="menu-list" id="acct-list" role="menu"></div>
   </div>
-</div>
+</header>
 
-<main>
-  <div class="section-h" id="h1"><h2>What the customer sees</h2><p>Everything here is what they'd actually get, by text or in the app.</p></div>
-  <section class="card" id="c-card" aria-live="polite">
-    <h2 id="card-title">Right now</h2>
-    <p class="who-line" id="who-line"></p>
-    <div class="lanes">
-      <div class="lane"><div class="tag">✓ What we know</div><div id="lane-ok"></div></div>
-      <div class="lane"><div class="tag">≈ Our best estimate</div><div id="lane-est"></div></div>
-      <div class="lane"><div class="tag">→ What to do</div><div id="lane-do"></div></div>
-    </div>
+<main class="wrap">
+  <section class="card signin" id="signin" hidden>
+    <h1>Sign in</h1>
+    <p class="muted" style="margin:0">See your outage status and estimated restoration time, and chat with our outage assistant.</p>
+    <div id="acct-buttons"></div>
+    <p class="small muted" style="margin:14px 0 0">Demo accounts</p>
   </section>
 
-  <section class="card" id="c-phone">
-    <h2>Their phone</h2>
-    <p class="lede">Alerts arrive on their own as the storm plays. Type a question to chat with the AI concierge.</p>
-    <div class="phone">
-      <div class="bar">Outage Concierge <span class="mode" id="ai-mode">…</span></div>
-      <div class="msgs" id="msgs" aria-live="polite"></div>
-      <div class="chips" id="chips"></div>
-      <form class="ask" id="ask">
-        <input id="ask-in" autocomplete="off" placeholder="Ask about your power…" aria-label="Ask the outage concierge">
-        <button id="ask-go" type="submit">Send</button>
-      </form>
-    </div>
-  </section>
-
-  <section class="card" id="c-tree">
-    <h2>What has to be fixed before power is back</h2>
-    <p class="lede">Power flows left to right. A break anywhere upstream means this home is out.</p>
-    <div class="tree" id="tree"></div>
-  </section>
-
-  <div class="section-h" id="h2"><h2>Behind the estimate</h2><p>How the predictions are made, and how well they've held up. For judges and operators.</p></div>
-  <section class="card" id="c-cone">
-    <h2>How our estimate changed during the storm</h2>
-    <p class="lede" id="cone-lede">We replay a past storm. Each hour the estimate is redone using only what crews had reported by then. A good estimate narrows toward the dashed line, when power actually came back.</p>
-    <div class="cone-wrap">
-      <div>
-        <div id="cone"></div>
-        <div class="legend" id="cone-legend">
-          <span><span class="sw" style="background:var(--band-fill);outline:1px solid var(--series-1)"></span>Likely window (8 in 10 outages end inside it)</span>
-          <span><span class="sw" style="background:var(--series-1);height:2px;vertical-align:3px"></span>Most likely time</span>
-          <span>● Text sent to the customer</span>
-          <span>– – Power actually came back</span>
-        </div>
-        <details><summary>Show as a table</summary><div id="cone-table"></div></details>
+  <div id="home" hidden>
+    <div class="notices" id="notices"></div>
+    <div class="layout">
+      <div class="col">
+        <section class="card hero" id="hero" aria-live="polite"><span class="skel">Loading your status…</span></section>
+        <section class="card todo" id="todo-card"><h2>What to do now</h2><ul id="todo"></ul></section>
+        <section class="card"><h2>Your plan</h2><div id="plan"></div></section>
+        <section class="card"><h2>Outage alerts</h2><div id="alerts"></div></section>
+        <div class="safety"><span class="pill bad">Safety</span>See a downed line? Stay 35 feet away and call 911.</div>
       </div>
-      <div class="whatif" role="group" aria-label="What-if controls">
-        <h3>Try a what-if</h3>
-        <label>Crews on this circuit</label>
-        <div class="seg" id="crews"></div>
-        <label for="poles">Extra broken poles found at hour 3: <b id="poles-v">0</b></label>
-        <input type="range" id="poles" min="0" max="3" step="1" value="0">
-        <label>Roads</label>
-        <div class="seg" id="access">
-          <button data-v="1" aria-pressed="true">Normal</button>
-          <button data-v="1.5" aria-pressed="false">Flooded / blocked</button>
+
+      <section class="card chat" id="chat" aria-label="Outage assistant">
+        <div class="chat-h">
+          <div class="av" aria-hidden="true">💬</div>
+          <div><div class="t">Outage Assistant</div><div class="small muted" id="chat-mode">Answers from your live outage data</div></div>
         </div>
-        <div class="out" id="whatif-out">Change something to see how the estimate moves.</div>
-      </div>
+        <div class="msgs" id="msgs" aria-live="polite"></div>
+        <div class="chips" id="chips"></div>
+        <form class="ask" id="ask">
+          <input class="field" id="ask-in" autocomplete="off" placeholder="Ask about your power, your plan, or safety…" aria-label="Message the outage assistant">
+          <button class="btn primary" type="submit" id="ask-go">Send</button>
+        </form>
+      </section>
     </div>
-  </section>
-
-
-  <section class="card" id="c-map">
-    <h2>Outage risk for the coming storm</h2>
-    <p class="lede">Each block is one circuit, split into 4 neighborhoods. Darker means higher risk. A red outline means no power at the current storm hour. Click a neighborhood to view it.</p>
-    <div id="map"></div>
-    <div class="legend" id="map-legend"></div>
-    <div class="caveat">Schematic: blocks are grouped by substation, not drawn on a real map.</div>
-  </section>
-
-  <section class="card" id="c-honesty">
-    <h2>Honesty scorecard</h2>
-    <p class="lede">How often did the real restoration time land inside our range? Each storm is scored by a model trained on the other storms only.</p>
-    <div class="seg" id="calib" style="margin-bottom:10px">
-      <button data-v="0" aria-pressed="false">Raw model</button>
-      <button data-v="1" aria-pressed="true">With calibration</button>
-    </div>
-    <div class="caveat" id="calib-note" style="margin:-4px 0 10px"></div>
-    <div class="tiles" id="tiles"></div>
-    <div id="strip"></div>
-    <div class="legend">
-      <span><span class="sw" style="background:var(--strip)"></span>Our likely window</span>
-      <span><span style="color:var(--series-1)">●</span> Real time, inside range</span>
-      <span><span style="color:var(--critical)">✕</span> Real time, outside range</span>
-    </div>
-    <details open><summary>Storm by storm</summary><div id="per-storm"></div></details>
-    <details><summary>Alert and escalation rules</summary><ol id="rules"></ol></details>
-    <div class="caveat" id="honesty-caveat"></div>
-  </section>
+  </div>
 </main>
-<div id="tip" role="tooltip"></div>
+<button class="btn primary fab" id="fab" hidden>💬 Ask the assistant</button>
+<div class="toast" id="toast"></div>
 
 <script>
-const START = new Date("2026-10-25T14:00:00");
-const PRE_H = 18;
-const S = { personas: [], persona: null, t: -PRE_H, whatIf: { crews: null, poles: 0, access: 1 },
-            replay: null, tree: [], map: [], pre: null, why: null, backtest: null, calibrated: true, playing: null, lastEventCount: 0,
-            chat: [], pending: false, convo: Math.random().toString(36).slice(2) };
-const $ = (id) => document.getElementById(id);
-const api = (p) => fetch(p).then(r => { if (!r.ok) throw new Error(p + " " + r.status); return r.json(); });
-const esc = (s) => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const api = async (path, opts) => { const r = await fetch(path, opts); if (!r.ok) throw new Error(await r.text()); return r.json(); };
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch {} },
+  del(k) { try { localStorage.removeItem(k); } catch {} },
+};
+const NEED_WORDS = { CPAP: "CPAP", insulin_fridge: "insulin", oxygen: "oxygen concentrator", sump_pump: "sump pump" };
+const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
 
-function clockAt(h, withDay = true) {
-  const d = new Date(START.getTime() + Math.round(h) * 3600e3);
-  const hr = d.getHours() % 12 || 12, ap = d.getHours() < 12 ? "am" : "pm";
-  const day = d.toLocaleDateString("en-US", { weekday: "short" });
-  return withDay && d.toDateString() !== START.toDateString() ? `${day} ${hr}${ap}` : `${hr}${ap}`;
-}
-function fullClock(h) {
-  const d = new Date(START.getTime() + h * 3600e3);
-  return d.toLocaleString("en-US", { weekday: "short", hour: "numeric", minute: "2-digit" });
-}
+let accounts = [], me = null, last = null, lastJson = "", convo = null, done = new Set(), greeted = false;
 
-// ---------- tooltip ----------
-const tip = $("tip");
-function showTip(e, text) { tip.textContent = text; tip.style.opacity = 1; moveTip(e); }
-function moveTip(e) {
-  const x = Math.min(e.clientX + 14, window.innerWidth - tip.offsetWidth - 8);
-  const y = Math.min(e.clientY + 14, window.innerHeight - tip.offsetHeight - 8);
-  tip.style.left = x + "px"; tip.style.top = y + "px";
+// ---------- accounts ----------
+async function boot() {
+  accounts = await api("/api/accounts");
+  $("acct-buttons").innerHTML = accounts.map((a, i) =>
+    `<button class="btn acct" data-i="${i}"><span><b>${esc(a.name)}</b><span class="small muted">Account ${esc(a.account)}</span></span><span aria-hidden="true">→</span></button>`).join("");
+  $("acct-buttons").onclick = e => { const b = e.target.closest("[data-i]"); if (b) signIn(accounts[+b.dataset.i]); };
+  $("acct-list").innerHTML = accounts.map((a, i) => `<button data-i="${i}" role="menuitem">${esc(a.name)} <span class="muted small">${esc(a.account)}</span></button>`).join("")
+    + `<button data-out="1" role="menuitem">Sign out</button>`;
+  $("acct-list").onclick = e => {
+    const b = e.target.closest("button"); if (!b) return; toggleMenu(false);
+    b.dataset.out ? signOut() : signIn(accounts[+b.dataset.i]);
+  };
+  $("acct-btn").onclick = () => toggleMenu();
+  document.addEventListener("click", e => { if (!e.target.closest("#acct-menu")) toggleMenu(false); });
+  const saved = accounts.find(a => a.premise_id === store.get("oc-account"));
+  saved ? signIn(saved) : signOut();
+  chatMode();
+  setInterval(refresh, 4000);
 }
-function hideTip() { tip.style.opacity = 0; }
-
-// ---------- loading ----------
-async function init() {
-  const [personas, map, bt, rules, info] = await Promise.all([
-    api("/api/customers"), api("/api/map"), api("/api/backtest"), api("/api/rules"), api("/api")]);
-  S.personas = personas; S.map = map; S.backtest = bt;
-  S.calibrated = !!bt.uses_calibration;
-  document.querySelectorAll("#calib button").forEach(b => {
-    b.setAttribute("aria-pressed", (b.dataset.v === "1") === S.calibrated);
-    if ((b.dataset.v === "1") === S.calibrated) b.textContent += " · in use";
-  });
-  $("calib-note").textContent = bt.uses_calibration
-    ? "The app adds a calibration step, because on storms it never saw, that got closer to 80%."
-    : "The app uses the raw model: on storms it never saw, calibration didn't get closer to 80%, it only made ranges wider.";
-  const st = info.storm;
-  $("storm-chip").textContent = `${st.name} · ${st.max_wind_mph} mph winds · arrives Sun 2pm`;
-  S.info = info;
-  const real = info.data_source === "real";
-  $("data-chip").textContent = real ? `Real AEP data · replaying the ${info.replay_storm ? info.replay_storm.name : "largest storm"}` : "Demo data (made up)";
-  $("data-chip").title = real ? "Circuits, damage and repair records from the AEP challenge package. Customers are synthetic personas." : "Fake data shaped like the AEP package";
-  $("honesty-caveat").textContent = real
-    ? "Scored on real AEP damage records. The records have dates but no times, so restoration times are only accurate to about half a day."
-    : "Built on made-up demo data, so these numbers show the method, not real-world accuracy.";
-  try { if (localStorage.getItem("introHidden") === "1") $("intro").hidden = true; } catch (e) {}
-  $("intro-x").onclick = () => { $("intro").hidden = true; try { localStorage.setItem("introHidden", "1"); } catch (e) {} };
-  $("persona").innerHTML = personas.map((p, i) => {
-    const needs = p.declared_needs.map(n => n.need.replace("_", " ")).join(", ");
-    return `<option value="${i}">${esc(p.name)}${needs ? " (" + esc(needs) + ")" : ""}</option>`;
-  }).join("");
-  $("persona").onchange = () => selectPersona(S.personas[+$("persona").value]);
-  $("rules").innerHTML = rules.map(r => `<li><b>${r.id}</b> ${esc(r.rule)}</li>`).join("");
-  $("crews").innerHTML = [["", "As recorded"], ["1", "1"], ["2", "2"], ["3", "3"], ["4", "4"], ["5", "5"]]
-    .map(([v, l]) => `<button data-v="${v}" aria-pressed="${v === ""}">${l}</button>`).join("");
-  segment("crews", v => { S.whatIf.crews = v ? +v : null; loadReplay(true); });
-  segment("access", v => { S.whatIf.access = +v; loadReplay(true); });
-  segment("calib", v => { S.calibrated = v === "1"; loadStrip(); });
-  $("poles").oninput = () => { $("poles-v").textContent = $("poles").value; S.whatIf.poles = +$("poles").value; debounceReplay(); };
-  $("t").oninput = () => { stopPlay(); S.t = +$("t").value; renderTime(); };
-  $("play").onclick = togglePlay;
-  $("ask").onsubmit = e => { e.preventDefault(); sendChat($("ask-in").value); };
-  api("/api/chat/status").then(st => { $("ai-mode").textContent = { ai: "AI on", simulated: "Simulated AI", keyword: "Keyword mode" }[st.mode]; $("ai-mode").title = st.mode === "ai" ? "Answers by " + st.model : st.mode === "simulated" ? "Stand-in for Claude (no API key)" : "Start Ollama with the outage-concierge model (or set ANTHROPIC_API_KEY) to turn on the AI"; });
-  window.addEventListener("resize", () => { renderCone(); renderMap(); renderStrip(); });
-  await selectPersona(personas[0]);
-  loadStrip();
+function toggleMenu(on) {
+  const l = $("acct-list"), v = on ?? !l.classList.contains("on");
+  l.classList.toggle("on", v); $("acct-btn").setAttribute("aria-expanded", v);
+}
+function signOut() {
+  me = null; store.del("oc-account");
+  $("signin").hidden = false; $("home").hidden = true; $("acct-menu").hidden = true; $("updated").textContent = "";
+  if (typeof updateFab === "function") updateFab();
+}
+function signIn(a) {
+  me = a; store.set("oc-account", a.premise_id); lastJson = ""; greeted = false;
+  try { done = new Set(JSON.parse(store.get("oc-done-" + a.premise_id) || "[]")); } catch { done = new Set(); }
+  convo = Math.random().toString(36).slice(2);
+  $("signin").hidden = true; $("home").hidden = false; $("acct-menu").hidden = false;
+  $("acct-btn").innerHTML = `${esc(a.name)} <span class="muted">${esc(a.account)}</span> ▾`;
+  $("msgs").innerHTML = ""; renderChips();
+  if (typeof updateFab === "function") updateFab();
+  refresh();
 }
 
-function segment(id, onPick) {
-  $(id).querySelectorAll("button").forEach(b => b.onclick = () => {
-    $(id).querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x === b));
-    onPick(b.dataset.v);
-  });
+// ---------- status ----------
+async function refresh() {
+  if (!me) return;
+  const who = me.premise_id;
+  try {
+    const s = await api(`/api/me/${encodeURIComponent(who)}`);
+    if (!me || me.premise_id !== who) return;
+    const j = JSON.stringify(s);
+    if (j !== lastJson) { lastJson = j; last = s; render(s); }
+    if (!greeted) { greeted = true; greet(); }
+    $("updated").textContent = `Updated ${new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`;
+  } catch { $("updated").textContent = "Reconnecting…"; }
 }
 
-async function selectPersona(p) {
-  S.persona = p; S.chat = []; S.convo = Math.random().toString(36).slice(2);
-  const pid = encodeURIComponent(p.premise_id);
-  const [tree, pre, why] = await Promise.all([api(`/api/premises/${pid}/tree`), api(`/api/premises/${pid}/card/pre_storm`), api(`/api/premises/${pid}/card/why`)]);
-  S.tree = tree; S.pre = pre; S.why = why;
-  await loadReplay(false);
-  renderMap();
-}
-
-let rTimer = null;
-function debounceReplay() { clearTimeout(rTimer); rTimer = setTimeout(() => loadReplay(true), 250); }
-async function loadReplay(isWhatIf) {
-  const before = S.replay;
-  const w = S.whatIf, q = new URLSearchParams({ premise_id: S.persona.premise_id });
-  if (w.crews) q.set("crews", w.crews);
-  if (w.poles) q.set("extra_poles", w.poles);
-  if (w.access !== 1) q.set("access", w.access);
-  S.replay = await api("/api/view/replay?" + q);
-  const end = S.replay.status === "ok" ? Math.ceil(S.replay.restored_h + 3) : 24;
-  $("t").max = end;
-  if (!isWhatIf && S.t > end) S.t = end;
-  if (isWhatIf) describeWhatIf(before, S.replay);
-  renderJumps(); renderCone(); renderTime();
-}
-
-function renderJumps() {
-  const R = S.replay, marks = [["Night before", -PRE_H], ["Storm hits", 0]];
-  if (R && R.status === "ok") {
-    marks.push(["Power goes out", Math.ceil(R.outage_h * 2) / 2]);
-    const upd = R.events.find(e => e.kind === "estimate_updated");
-    if (upd) marks.push(["Estimate changes", upd.t]);
-    marks.push(["Power back", Math.ceil(R.restored_h * 2) / 2]);
-  }
-  S.marks = marks;
-  $("jumps").innerHTML = marks.map(([l, t]) => `<button type="button" data-t="${t}">${esc(l)}</button>`).join("");
-  $("jumps").querySelectorAll("button").forEach(b => b.onclick = () => { stopPlay(); S.t = +b.dataset.t; renderTime(); });
-}
-
-function stepAt(t) {
-  if (!S.replay || S.replay.status !== "ok") return null;
-  let s = null;
-  for (const x of S.replay.steps) if (x.t <= t) s = x;
-  return s;
-}
-
-function describeWhatIf(before, after) {
-  const el = $("whatif-out");
-  if (!before || before.status !== "ok" || after.status !== "ok") { el.textContent = ""; return; }
-  const t = Math.max(S.t, after.outage_h);
-  const a = stepAt.call(null, t);
-  const b = (() => { let s = null; for (const x of before.steps) if (x.t <= t) s = x; return s; })();
-  if (!a || !b) { el.textContent = "Move the storm clock into the outage to compare."; return; }
-  const diff = a.p50 - b.p50;
-  const dir = Math.abs(diff) < 0.5 ? "about the same" : diff > 0 ? `about ${Math.round(diff)} h later` : `about ${Math.round(-diff)} h sooner`;
-  el.innerHTML = `As of ${esc(clockAt(t))}, most likely restore: <b>${esc(clockAt(a.p50))}</b> (${dir}). Window ${esc(clockAt(a.p10))}–${esc(clockAt(a.p90))}.`
-    + (S.replay.what_if_note ? `<div class="caveat">${esc(S.replay.what_if_note)}</div>` : "");
-}
-
-// ---------- time-driven views ----------
-function renderTime() {
-  $("t").value = S.t;
-  const t = S.t, R = S.replay;
-  $("clock").textContent = fullClock(t);
-  let phase, color;
-  if (t < 0) { phase = `Before the storm · it arrives in ${Math.round(-t)} h`; color = "var(--muted)"; }
-  else if (R && R.status === "ok" && t >= R.outage_h && t < R.restored_h) { phase = `Power out · storm hour ${t}`; color = "var(--critical)"; }
-  else if (R && R.status === "ok" && t >= R.restored_h) { phase = `Power restored · storm hour ${t}`; color = "var(--good)"; }
-  else { phase = `Power on · storm hour ${t}`; color = "var(--good)"; }
-  $("phase").innerHTML = `<span class="dot" style="background:${color}"></span><span>${esc(phase)}</span>`;
-  let cur = null;
-  (S.marks || []).forEach(([, mt]) => { if (mt <= t) cur = mt; });
-  $("jumps").querySelectorAll("button").forEach(b => b.setAttribute("aria-current", +b.dataset.t === cur));
-  const p = S.persona, needs = (p.declared_needs || []).map(n => n.need === "insulin_fridge" ? "keeps insulin in the fridge" : `uses a ${n.need}${n.battery_hours ? " (" + n.battery_hours + " h battery)" : ""}`);
-  $("card-title").textContent = `Right now for ${p.name}`;
-  $("who-line").textContent = (needs.length ? `${p.name} ${needs.join(", ")}, which they told us about. ` : "No medical or special needs declared. ") + "Facts, estimates and actions are kept separate.";
-  renderLanes(); renderPhone(); renderChips(); renderTree(); paintMapOutages(); moveConeCursor();
-}
-
-function latestEvent(t) {
-  if (!S.replay || S.replay.status !== "ok") return null;
-  let e = null;
-  for (const x of S.replay.events) if (x.t <= t && x.kind !== "escalation") e = x;
-  return e;
-}
-
-function list(items) { return items && items.length ? `<ul>${items.map(i => `<li>${esc(i)}</li>`).join("")}</ul>` : ""; }
-
-function renderLanes() {
-  const t = S.t, R = S.replay, pre = S.pre.card, why = S.why.card;
-  const risk = pre.risk;
-  let ok = "", est = "", act = "";
-  const riskHtml = risk
-    ? `<div class="big">${esc(risk.band)} risk</div><div>${esc(risk.confidence)} confidence</div>${list(risk.top_factors)}`
-    : `<div class="big">Not enough data</div><div>${esc(pre.general_guidance || "")}</div>`;
-  const out = R && R.status === "ok" && t >= R.outage_h && t < R.restored_h;
-  const back = R && R.status === "ok" && t >= R.restored_h;
-  if (t < 0) {
-    ok = `<div class="big">${esc(pre.storm.name)} is coming</div><div>Arrives in about ${Math.round(-t)} h with winds up to ${pre.storm.max_wind_mph} mph.</div>`;
-    est = riskHtml + (pre.restoration ? `<div class="note">If power goes out: likely ${esc(pre.restoration.hours_range)}.</div>` : "");
-    act = list(pre.actions.slice(0, 4));
-  } else if (out) {
-    const fixed = [];
-    S.tree.forEach(n => n.damage.forEach(d => { if (d.done_h <= t) fixed.push(`Crews fixed ${d.text} (${n.label.toLowerCase()})`); }));
-    ok = `<div class="big">Power out since ${esc(clockAt(R.outage_h))}</div>${list(fixed)}`;
-    const s = stepAt(t), ev = latestEvent(t);
-    const c = ev && ev.card && ev.card.restoration;
-    est = s ? `<div class="big">Back ~${esc(clockAt(s.p50))}</div><div>Window ${esc(clockAt(s.p10))}–${esc(clockAt(s.p90))}${c ? " · " + esc(c.confidence) + " confidence" : ""}</div>${c ? list(c.drivers.slice(0, 3)) : ""}${c && c.note ? `<div class="note">⚠ ${esc(c.note)}</div>` : ""}<div class="note">Model estimate, not a promise.</div>` : "";
-    act = list((ev && ev.card ? ev.card.actions : []).slice(0, 4));
-  } else if (back) {
-    ok = `<div class="big">Power restored at ${esc(clockAt(R.restored_h))}</div><div>Out for ${Math.round(R.restored_h - R.outage_h)} h.</div>`;
-    est = `<div class="big">No estimate needed</div><div class="note">Still out? Text OUT.</div>`;
-    act = list(["Toss fridge food that was above 40F for over 4 hrs.", "Reset clocks and check your medical devices."]);
+function render(s) {
+  $("notices").innerHTML = s.notices.map(n =>
+    `<div class="notice ${n.level === "warning" ? "warning" : "info"}"><b>${n.level === "warning" ? "Important" : "Update"}</b><span>${esc(n.text)}</span></div>`).join("");
+  const e = s.estimate;
+  let h = "";
+  if (s.state === "out") {
+    h += `<div class="state"><span class="pill bad"><span class="dot"></span>Power out since ${esc(s.outage_since)}</span></div>`;
+    if (e && e.confirmed_etr) {
+      h += `<div class="big-label">Power back by</div><div class="big">${esc(e.confirmed_etr)}</div>
+            <div class="confirmed"><span class="tick">✓</span>Confirmed by our crews</div>
+            <p class="sub" style="margin:12px 0 0">Our model's range: ${esc(e.window.replace("-", " to "))}</p>`;
+    } else if (e) {
+      h += `<div class="big-label">Estimated restoration</div><div class="big">${esc(e.likely)}</div>
+            <div class="sub">Likely between <b>${esc(e.window.replace("-", " and "))}</b> · ${esc(e.confidence)} confidence</div>`;
+    } else {
+      h += `<div class="big">Crews are assessing the damage</div><div class="sub">We'll have an estimate soon.</div>`;
+    }
+    if (e && e.note) h += `<p class="small muted" style="margin:8px 0 0">${esc(e.note)}</p>`;
+    if (e && e.drivers && e.drivers.length)
+      h += `<div class="why"><h2>Why it's taking this long</h2><ul>${e.drivers.slice(0, 3).map(d => `<li>${esc(cap(d))}</li>`).join("")}</ul></div>`;
+  } else if (s.state === "storm_coming") {
+    const st = s.storm || {};
+    h += `<div class="state"><span class="pill warn"><span class="dot"></span>${esc(st.name || "A storm")} arrives in about ${esc(st.eta_hours)} hours</span></div>`;
+    if (s.risk) {
+      h += `<div class="big-label">Your outage risk</div><div class="big">${esc(s.risk.band)}</div>
+            <div class="sub">${esc(cap(s.risk.confidence))} confidence · winds up to ${esc(st.max_wind_mph)} mph</div>`;
+      if (e) h += `<p class="sub" style="margin:10px 0 0">If you lose power, plan for <b>${esc(e.hours_range.replace(" hrs", " hours"))}</b>.</p>`;
+      h += `<div class="why"><h2>Why</h2><ul>${s.risk.top_factors.map(f => `<li>${esc(f)}</li>`).join("")}</ul></div>`;
+    } else {
+      h += `<div class="big-label">Your outage risk</div><div class="big">Not enough history</div><div class="sub">${esc(s.general_guidance || "")}</div>`;
+    }
+  } else if (s.state === "restored") {
+    h += `<div class="state"><span class="pill good"><span class="dot"></span>Power restored</span></div>
+          <div class="big-label">Power came back</div><div class="big">${esc(s.restored_at)}</div>
+          <div class="sub">Still without power? Tell the assistant and we'll check your line.</div>`;
   } else {
-    ok = `<div class="big">${t >= 0 ? "Storm has arrived. Power is on." : ""}</div>${R && R.status !== "ok" ? "<div>No damage on this line in the replayed storm.</div>" : ""}`;
-    est = riskHtml;
-    act = list(pre.actions.slice(0, 3));
+    h += `<div class="state"><span class="pill good"><span class="dot"></span>Power is on</span></div>
+          <div class="big-label">Your service</div><div class="big">No outage at your address</div>
+          <div class="sub">${s.risk ? `Storm risk for your area: ${esc(s.risk.band)}. ` : ""}We'll text you if that changes.</div>`;
   }
-  $("lane-ok").innerHTML = ok; $("lane-est").innerHTML = est; $("lane-do").innerHTML = act;
-}
+  if (s.honesty) h += `<div class="meta"><span>How accurate are we? ${esc(s.honesty)}.</span></div>`;
+  $("hero").innerHTML = h;
 
-function renderPhone() {
-  const t = S.t, R = S.replay, el = $("msgs");
-  const items = [{ at: "Sat 8pm", text: S.pre.text, seg: S.pre.segments }];
-  if (S.pre.card.risk || S.pre.card.fallback) {} // pre-storm alert always shown for the demo
-  if (R && R.status === "ok") for (const e of R.events) if (e.t <= t) items.push({ t: e.t, at: e.clock, text: e.text, seg: e.segments, kind: e.kind, order: e.kind === "escalation" ? 1 : 0 });
-  items[0].t = -PRE_H - 1;
-  const all = [...items, ...S.chat].sort((a, b) => a.t - b.t || (a.order || 0) - (b.order || 0));
-  const html = all.map((m, i) => m.role ? chatHtml(m) : m.kind === "escalation" ? `<div class="sysnote">📞 <b>${esc(m.text)}</b><div class="meta">${esc(m.at)} · not a text: what the system does next</div></div>` : `<div><div class="bubble ${i === all.length - 1 && all.length > S.lastEventCount && i > 0 && !S.chat.length ? "new" : ""}">${esc(m.text)}</div><div class="meta">${esc(m.at)} · ${m.seg} SMS</div></div>`).join("")
-    + (S.pending ? `<div class="typing">Concierge is checking…</div>` : "");
-  el.innerHTML = html || `<div class="empty">No texts yet.</div>`;
-  S.lastEventCount = all.length + (S.pending ? 1 : 0) - 1;
-  if (all.length !== S._shown) el.scrollTop = el.scrollHeight;
-  S._shown = all.length;
-}
+  const acts = s.actions || [];
+  $("todo-card").hidden = !acts.length;
+  $("todo").innerHTML = acts.map(a =>
+    `<li class="${done.has(a) ? "done" : ""}" data-a="${esc(a)}" role="checkbox" aria-checked="${done.has(a)}" tabindex="0"><span class="box"></span><span>${esc(a)}</span></li>`).join("");
 
-// ---------- AI chat ----------
-function dur(h) {
-  if (h == null) return "–";
-  return h >= 72 ? `${Math.round(h / 24)} days` : `${Math.round(h)} h`;
+  const pb = s.power_budget || [];
+  $("plan").innerHTML = pb.length
+    ? `<p class="small muted" style="margin:0">Hours after the power goes out</p><div class="timeline">${pb.map(i =>
+        `<div class="tl-row"><span class="h">Hour ${esc(i.hour)}</span><span>${esc(i.what)}</span><span class="pill ${i.risk === "likely" ? "bad" : i.risk === "possible" ? "warn" : "good"}">${esc(i.risk)}</span></div>`).join("")}</div>`
+    : `<p class="muted" style="margin:0">${s.state === "out" || s.state === "storm_coming" ? "Tell the assistant about any medical devices, and we'll build a timeline for you." : "Nothing to plan for right now."}</p>`;
+
+  const al = s.alerts || {};
+  const ch = (al.channels || []).map(c => c === "sms" ? "Text" : c === "voice" ? "Phone call" : c).join(" + ");
+  const needs = (s.declared_needs || []).map(n => NEED_WORDS[n] || n);
+  $("alerts").innerHTML = al.enrolled
+    ? `<p style="margin:0"><span class="pill good">On</span> ${esc(ch)}</p><p class="small muted" style="margin:8px 0 0">We'll tell you when power goes out, when the estimate changes, and when it's back.${needs.length ? ` Because you told us about your ${esc(needs.join(", "))}, we'll also call to check in.` : ""}</p>`
+    : `<p style="margin:0"><span class="pill warn">Off</span> You qualify for outage texts.</p><p class="small muted" style="margin:8px 0 0">Text JOIN to our outage number to turn them on.</p>`;
 }
-const SOURCE_LABEL = { ai: "AI", simulated: "Simulated AI (no API key)", keyword: "Keyword bot", fallback: "Keyword bot (AI unavailable)", rejected: "Keyword bot (AI answer failed a check)", safety_gate: "Safety message (no AI)" };
-function stepSummary(s) {
-  const r = s.result || {};
-  if (s.tool === "what_if") {
-    const i = s.input || {}, bits = [];
-    if (i.crews) bits.push(i.crews + " crew" + (i.crews > 1 ? "s" : ""));
-    if (i.extra_poles) bits.push(i.extra_poles + " extra pole" + (i.extra_poles > 1 ? "s" : ""));
-    if (i.roads_blocked) bits.push("roads blocked");
-    return (bits.join(", ") || "what-if") + (r.restoration ? " → window " + r.restoration.window : "");
-  }
-  if (r.restoration && s.tool === "get_outage_status") return "window " + r.restoration.window + ", likely " + r.restoration.likely;
-  if (r.risk && s.tool === "get_outage_status") return "risk " + r.risk.band + " (" + r.risk.confidence + " confidence)";
-  if (s.tool === "get_storm_plan" && r.power_budget) return r.power_budget.length + " timeline items, " + (r.actions || []).length + " actions";
-  if (s.tool === "explain_estimate" && r.honesty) return r.honesty;
-  if (s.tool === "request_human") return "callback requested";
-  return "";
+function toggleTodo(li) {
+  if (!li || !me) return;
+  const a = li.dataset.a; done.has(a) ? done.delete(a) : done.add(a);
+  store.set("oc-done-" + me.premise_id, JSON.stringify([...done])); render(last);
 }
-function chatHtml(m) {
-  if (m.role === "me") return `<div class="row-me"><div class="bubble me">${esc(m.text)}</div><div class="meta">${esc(m.at)}</div></div>`;
-  const steps = m.steps || [];
-  const how = steps.length || m.source === "safety_gate" || m.source === "rejected"
-    ? `<details class="how" ${m === S.chat.filter(x => x.role === "ai").slice(-1)[0] ? "open" : ""}><summary>How I answered${steps.length ? " · " + steps.length + " check" + (steps.length > 1 ? "s" : "") : ""}</summary><ol>`
-      + steps.map(s => `<li>${esc(s.label)}${stepSummary(s) ? ": " + esc(stepSummary(s)) : ""}</li>`).join("")
-      + (m.grounded ? `<li class="ok">✓ Every number in this answer came from these checks</li>` : "")
-      + (m.source === "rejected" ? `<li>The AI's answer used a number our engine didn't give it (${esc((m.ungrounded_numbers || []).join(", "))}), so it was replaced.</li>` : "")
-      + (m.source === "safety_gate" ? `<li>Safety words detected: this pre-approved message skips the AI entirely.</li>` : "")
-      + `</ol></details>` : "";
-  return `<div><div class="who">${esc(SOURCE_LABEL[m.source] || m.source)}</div><div class="bubble ai">${esc(m.text)}</div><div class="meta">${esc(m.at)}</div>${how}</div>`;
+$("todo").addEventListener("click", e => toggleTodo(e.target.closest("li")));
+$("todo").addEventListener("keydown", e => { if (e.key === " " || e.key === "Enter") { e.preventDefault(); toggleTodo(e.target.closest("li")); } });
+
+// ---------- chat ----------
+async function chatMode() {
+  try {
+    const m = await api("/api/chat/status");
+    $("chat-mode").textContent = m.mode === "keyword" ? "Answers from your live outage data" : "AI assistant · answers from your live outage data";
+  } catch {}
 }
 function renderChips() {
-  const dev = (S.persona.declared_needs || []).find(n => n.battery_hours && n.need !== "insulin_fridge");
-  const list = S.t < 0
-    ? ["Will I lose power?", dev ? `I use a ${dev.need}. Should we leave tonight?` : "How should I prepare?", "Do I get alerts?", "Generator safety tips?"]
-    : ["When is my power back?", "Why is it taking so long?", "What if only 1 crew?", dev ? `My ${dev.need} lasts ${dev.battery_hours} hours. Help?` : "Is my food still safe?"];
-  $("chips").innerHTML = list.map(c => `<button type="button">${esc(c)}</button>`).join("");
-  $("chips").querySelectorAll("button").forEach(b => b.onclick = () => sendChat(b.textContent));
+  const needs = (me && me.declared_needs) || [];
+  const q = ["When will my power be back?", "Why is it taking so long?"];
+  if (needs.includes("CPAP")) q.push("My CPAP lasts 8 hours. What should I do?");
+  else if (needs.includes("insulin_fridge")) q.push("How long will my insulin stay cold?");
+  else q.push("How should I prepare?");
+  q.push("Is it safe to use a generator?", "Talk to a person");
+  $("chips").innerHTML = q.map(t => `<button class="chip" type="button">${esc(t)}</button>`).join("");
 }
-async function sendChat(text) {
-  text = text.trim();
-  if (!text || S.pending) return;
-  stopPlay();
-  const at = clockAt(S.t), order = Date.now();
-  S.chat.push({ role: "me", text, t: S.t, at, order });
-  S.pending = true; $("ask-go").disabled = true; $("ask-in").value = ""; renderPhone();
+$("chips").onclick = e => { const b = e.target.closest(".chip"); if (b) send(b.textContent); };
+function bubble(cls, html) {
+  const d = document.createElement("div"); d.className = "msg " + cls; d.innerHTML = html;
+  $("msgs").appendChild(d); $("msgs").scrollTop = 1e9; return d;
+}
+function greet() {
+  const s = last; if (!s || !me) return;
+  const e = s.estimate;
+  const lead = s.state === "out" ? `I can see your power is out. ${e && e.confirmed_etr ? `Our crews have confirmed it'll be back by ${e.confirmed_etr}.` : e ? `Our best estimate is ${e.likely}.` : ""}`
+    : s.state === "storm_coming" ? `${s.storm ? s.storm.name : "A storm"} is on its way, and I can help you get ready.`
+    : s.state === "restored" ? "Your power is back on." : "Your power is on right now.";
+  bubble("bot", esc(`Hi ${me.name}. ${lead} Ask me anything about your power, your plan, or staying safe.`));
+}
+async function send(text) {
+  text = text.trim(); if (!text || !me) return;
+  bubble("me", esc(text)); $("ask-in").value = ""; $("ask-go").disabled = true;
+  const t = document.createElement("div"); t.className = "typing"; t.textContent = "Checking your outage…";
+  $("msgs").appendChild(t); $("msgs").scrollTop = 1e9;
   try {
-    const w = S.whatIf;
-    const res = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ premise_id: S.persona.premise_id, message: text, conversation_id: S.convo, t: S.t,
-                             crews: w.crews, extra_poles: w.poles, access: w.access }) });
-    if (!res.ok) throw new Error("chat " + res.status);
-    const r = await res.json();
-    S.chat.push({ role: "ai", text: r.text, source: r.source, steps: r.steps, grounded: r.grounded, ungrounded_numbers: r.ungrounded_numbers, t: S.t, at, order: order + 1 });
-  } catch (e) {
-    S.chat.push({ role: "ai", text: "Sorry, I couldn't reach the concierge. Text HELP to reach a person.", source: "fallback", t: S.t, at, order: order + 1 });
-  }
-  S.pending = false; $("ask-go").disabled = false; renderPhone();
+    const r = await api("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ premise_id: me.premise_id, message: text, conversation_id: convo }) });
+    t.remove();
+    const how = [...new Set((r.steps || []).map(s => s.label).filter(Boolean))];
+    bubble(r.source === "safety_gate" ? "alert" : "bot", esc(r.text) + (how.length ? `<div class="how">${esc(how.join(" · "))}</div>` : ""));
+  } catch {
+    t.remove();
+    bubble("bot", "Sorry, I couldn't reach the outage system just now. Please try again in a moment, or call us if it's urgent.");
+  } finally { $("ask-go").disabled = false; $("ask-in").focus(); }
 }
+$("ask").onsubmit = e => { e.preventDefault(); send($("ask-in").value); };
+$("fab").onclick = () => { $("chat").scrollIntoView({ behavior: "smooth" }); setTimeout(() => $("ask-in").focus(), 400); };
+let chatVisible = false;
+function updateFab() { $("fab").hidden = !me || chatVisible; }
+new IntersectionObserver(([e]) => { chatVisible = e.isIntersecting; updateFab(); }).observe($("chat"));
 
-const STATUS = {
-  normal: ["var(--muted)", "Normal"], damaged: ["var(--critical)", "Damaged"], fixed: ["var(--good)", "Fixed"],
-  on: ["var(--good)", "Power on"], out: ["var(--critical)", "Power out"],
-};
-function renderTree() {
-  const t = S.t;
-  let upstreamDead = false;
-  const parts = S.tree.map((n, i) => {
-    const seen = t < 0 ? [] : n.damage.filter(d => d.report_h <= t);
-    const open = seen.filter(d => d.done_h > t), fixed = seen.filter(d => d.done_h <= t);
-    let st = open.length ? "damaged" : fixed.length ? "fixed" : "normal";
-    if (n.type === "HOME") st = upstreamDead ? "out" : "on";
-    const arrowDead = upstreamDead;
-    if (open.length) upstreamDead = true;
-    const [color, label] = STATUS[st];
-    const items = [...open.map(d => `<li>⚠ ${esc(d.text)}</li>`), ...fixed.map(d => `<li class="fixed">${esc(d.text)}</li>`)].join("");
-    const arrow = i ? `<div class="arrow ${arrowDead ? "dead" : ""}" aria-hidden="true">→</div>` : "";
-    return `${arrow}<div class="node"><h4>${esc(n.label)}</h4><span class="status"><span class="dot" style="background:${color}"></span>${label}</span>${items ? `<ul class="items">${items}</ul>` : ""}${n.history ? `<div class="hist">${esc(n.history)}</div>` : ""}</div>`;
-  });
-  $("tree").innerHTML = parts.join("");
-}
-
-// ---------- cone chart ----------
-let coneGeom = null;
-function renderCone() {
-  const el = $("cone"), R = S.replay;
-  if (!R || R.status !== "ok") {
-    el.innerHTML = `<div class="empty" style="padding:60px 0">This line had no damage in the replayed storm. Pick Maria or Sam to see a replay.</div>`;
-    $("cone-table").innerHTML = ""; coneGeom = null; return;
-  }
-  const W = Math.max(320, el.clientWidth || 640), H = 300, m = { l: 64, r: 16, t: 10, b: 30 };
-  const steps = R.steps;
-  const xMax = Math.ceil(R.restored_h + 3);
-  const yMaxRaw = Math.max(...steps.map(s => s.p90), R.restored_h + 6);
-  const yMax = Math.min(Math.ceil(yMaxRaw / 12) * 12, Math.max(72, Math.ceil(R.restored_h * 1.6 / 12) * 12));
-  const x = h => m.l + (h / xMax) * (W - m.l - m.r);
-  const y = h => m.t + (1 - Math.min(h, yMax) / yMax) * (H - m.t - m.b);
-  let g = "";
-  const yStep = yMax > 96 ? 24 : 12;
-  for (let v = 0; v <= yMax; v += yStep) g += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(v)}" y2="${y(v)}" stroke="var(--grid)"/><text x="${m.l - 8}" y="${y(v) + 4}" text-anchor="end">${clockAt(v)}</text>`;
-  const xStep = Math.max(3, Math.ceil((xMax * 78 / (W - m.l - m.r)) / 3) * 3);
-  for (let v = 0; v <= xMax; v += xStep) g += `<text x="${x(v)}" y="${H - 10}" text-anchor="middle">${clockAt(v)}</text>`;
-  g += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(0)}" y2="${y(0)}" stroke="var(--axis)"/>`;
-  // "now" diagonal: an estimate can never be in the past
-  g += `<line x1="${x(0)}" y1="${y(0)}" x2="${x(Math.min(xMax, yMax))}" y2="${y(Math.min(xMax, yMax))}" stroke="var(--axis)" stroke-dasharray="2 4"/>`;
-  // battery line for declared needs
-  (S.persona.declared_needs || []).filter(n => n.battery_hours && n.need !== "insulin_fridge").forEach(n => {
-    const yy = R.outage_h + n.battery_hours;
-    g += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(yy)}" y2="${y(yy)}" stroke="var(--serious)" stroke-dasharray="4 3"/><text x="${W - m.r - 4}" y="${y(yy) + 15}" text-anchor="end" class="ink2">⚠ ${esc(n.need)} battery empty ~${clockAt(yy)}</text>`;
-  });
-  const area = steps.map(s => `${x(s.t)},${y(s.p90)}`).join(" ") + " " + steps.slice().reverse().map(s => `${x(s.t)},${y(s.p10)}`).join(" ");
-  g += `<polygon points="${area}" fill="var(--band-fill)" stroke="none"/>`;
-  g += `<polyline points="${steps.map(s => `${x(s.t)},${y(s.p50)}`).join(" ")}" fill="none" stroke="var(--series-1)" stroke-width="2" stroke-linejoin="round"/>`;
-  // actual restore
-  g += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(R.restored_h)}" y2="${y(R.restored_h)}" stroke="var(--ink)" stroke-dasharray="6 4"/><text x="${W - m.r - 4}" y="${y(R.restored_h) + 15}" text-anchor="end" class="ink">Power actually back ${clockAt(R.restored_h)}</text>`;
-  // text markers
-  const p50At = t => { let s = steps[0]; for (const z of steps) if (z.t <= t) s = z; return s.p50; };
-  const marks = R.events.filter(e => e.kind !== "restored" && e.kind !== "escalation");
-  marks.forEach((e, i) => {
-    g += `<circle class="ev" data-i="${i}" cx="${x(e.t)}" cy="${y(p50At(e.t))}" r="5" fill="var(--ink)" stroke="var(--surface)" stroke-width="2"/>`;
-  });
-  g += `<line id="cone-cursor" y1="${m.t}" y2="${H - m.b}" stroke="var(--ink-2)" stroke-width="1"/>`;
-  g += `<rect id="cone-hit" x="${m.l}" y="${m.t}" width="${W - m.l - m.r}" height="${H - m.t - m.b}" fill="transparent"/>`;
-  el.innerHTML = `<svg width="100%" viewBox="0 0 ${W} ${H}" role="img" aria-label="Estimated restoration window over time, narrowing toward the actual restoration time">${g}</svg>`;
-  coneGeom = { x, y, xMax, W, m };
-  const svg = el.querySelector("svg");
-  svg.querySelector("#cone-hit").addEventListener("mousemove", e => {
-    const r = svg.getBoundingClientRect(), px = (e.clientX - r.left) * (W / r.width);
-    const h = (px - m.l) / (W - m.l - m.r) * xMax;
-    const s = stepAt(h);
-    if (!s) return showTip(e, `${clockAt(h)}: power still on here`);
-    showTip(e, `As of ${clockAt(s.t)}:\nmost likely back ${clockAt(s.p50)}\nwindow ${clockAt(s.p10)}–${clockAt(s.p90)}`);
-  });
-  svg.querySelector("#cone-hit").addEventListener("mouseleave", hideTip);
-  svg.querySelector("#cone-hit").addEventListener("click", e => {
-    const r = svg.getBoundingClientRect(), px = (e.clientX - r.left) * (W / r.width);
-    S.t = Math.max(0, Math.round(((px - m.l) / (W - m.l - m.r) * xMax) * 2) / 2); stopPlay(); renderTime();
-  });
-  svg.querySelectorAll(".ev").forEach(c => {
-    const ev = marks[+c.dataset.i];
-    c.addEventListener("mouseenter", e => showTip(e, `${ev.clock} text:\n${ev.text}`));
-    c.addEventListener("mousemove", moveTip);
-    c.addEventListener("mouseleave", hideTip);
-  });
-  $("cone-table").innerHTML = `<table><tr><th>As of</th><th>P10</th><th>P50</th><th>P90</th></tr>${steps.map(s => `<tr><td>${clockAt(s.t)}</td><td>${clockAt(s.p10)}</td><td>${clockAt(s.p50)}</td><td>${clockAt(s.p90)}</td></tr>`).join("")}</table>`;
-  moveConeCursor();
-}
-function moveConeCursor() {
-  const c = document.getElementById("cone-cursor");
-  if (!c || !coneGeom) return;
-  const t = Math.max(0, Math.min(S.t, coneGeom.xMax));
-  c.setAttribute("x1", coneGeom.x(t)); c.setAttribute("x2", coneGeom.x(t));
-  c.style.display = S.t < 0 ? "none" : "";
-}
-
-// ---------- map ----------
-const BAND = { Low: "var(--risk-low)", Elevated: "var(--risk-elevated)", High: "var(--risk-high)", Severe: "var(--risk-severe)" };
-function renderMap() {
-  const el = $("map");
-  const W = Math.max(280, el.clientWidth || 480);
-  // One block per circuit (2x2 neighborhoods), ordered by substation so neighbors sit together.
-  const circuits = {};
-  S.map.forEach((c, i) => { (circuits[c.circuit] = circuits[c.circuit] || { sub: c.substation || "", n: c.circuit_n, cells: [] }).cells.push(i); });
-  const order = Object.keys(circuits).sort((a, b) => (circuits[a].sub + "").localeCompare(circuits[b].sub + "", undefined, { numeric: true }) || circuits[a].n - circuits[b].n);
-  const cols = Math.max(4, Math.ceil(Math.sqrt(order.length * 1.6)));
-  const gapB = 8, labelH = order.length > 40 ? 4 : 14;
-  const s = Math.max(6, Math.min(22, Math.floor((W / cols - gapB - 2) / 2)));
-  const bw = 2 * s + 2, bh = 2 * s + 2 + labelH;
-  let g = "";
-  order.forEach((cid, k) => {
-    const bx = (k % cols) * (bw + gapB), by = Math.floor(k / cols) * (bh + gapB) + 14;
-    circuits[cid].cells.forEach(i => {
-      const c = S.map[i], x = bx + (c.zone % 2) * (s + 2), y = by + Math.floor(c.zone / 2) * (s + 2);
-      const fill = c.band ? BAND[c.band] : "var(--risk-none)";
-      g += `<rect class="cell" data-i="${i}" x="${x}" y="${y}" width="${s}" height="${s}" rx="2" fill="${fill}" style="cursor:pointer"/>`;
-      g += `<rect class="out" data-i="${i}" x="${x + 1}" y="${y + 1}" width="${s - 2}" height="${s - 2}" rx="2" fill="none" stroke="var(--critical)" stroke-width="2" style="pointer-events:none;display:none"/>`;
-      if (S.persona && S.persona.premise_id === c.premise_id) {
-        g += `<rect x="${x - 2}" y="${y - 2}" width="${s + 4}" height="${s + 4}" rx="3" fill="none" stroke="var(--ink)" stroke-width="2.5" style="pointer-events:none"/>`;
-        g += `<text x="${bx + s + 1}" y="${by - 4}" text-anchor="middle" style="fill:var(--ink);font-weight:700;font-size:11px">You</text>`;
-      }
-    });
-    if (labelH > 4) g += `<text x="${bx + s + 1}" y="${by + 2 * s + 13}" text-anchor="middle" style="font-size:10px">${esc(cid)}</text>`;
-  });
-  const H = Math.ceil(order.length / cols) * (bh + gapB) + 14;
-  el.innerHTML = `<svg width="100%" viewBox="0 0 ${W} ${H}" role="img" aria-label="Outage risk by neighborhood for ${order.length} circuits">${g}</svg>`;
-  el.querySelectorAll(".cell").forEach(p => {
-    const c = S.map[+p.dataset.i];
-    p.addEventListener("mouseenter", e => {
-      const win = c.outage_windows.length ? `\nIn the replayed storm: out ${clockAt(Math.min(...c.outage_windows.map(w => w[0])))}–${clockAt(Math.max(...c.outage_windows.map(w => w[1])))}` : "\nNo damage here in the replayed storm";
-      showTip(e, `Circuit ${c.circuit}, neighborhood ${c.zone + 1}\nRisk: ${c.band ? c.band + " (" + Math.round(c.probability * 100) + "%)" : "not enough history"}${win}\nClick to view as a customer here`);
-    });
-    p.addEventListener("mousemove", moveTip);
-    p.addEventListener("mouseleave", hideTip);
-    p.addEventListener("click", () => {
-      hideTip();
-      const known = S.personas.findIndex(x => x.premise_id === c.premise_id);
-      const persona = known >= 0 ? S.personas[known] : { name: `A customer on ${c.circuit}`, premise_id: c.premise_id, declared_needs: [] };
-      if (known < 0) {
-        S.personas.push(persona);
-        $("persona").insertAdjacentHTML("beforeend", `<option value="${S.personas.length - 1}">${esc(persona.name)}</option>`);
-      }
-      $("persona").value = S.personas.indexOf(persona);
-      selectPersona(persona);
-    });
-  });
-  $("map-legend").innerHTML = ["Low", "Elevated", "High", "Severe"].map(b => `<span><span class="sw" style="background:${BAND[b]}"></span>${b}</span>`).join("")
-    + `<span><span class="sw" style="background:var(--risk-none)"></span>Not enough history</span>`
-    + `<span><span class="sw" style="border:2px solid var(--critical);background:none"></span>No power right now</span>`;
-  paintMapOutages();
-}
-function paintMapOutages() {
-  const t = S.t;
-  document.querySelectorAll("#map .out").forEach(p => {
-    const c = S.map[+p.dataset.i];
-    const out = t >= 0 && c.outage_windows.some(([a, b]) => a <= t && t < b);
-    p.style.display = out ? "" : "none";
-  });
-}
-
-// ---------- honesty ----------
-let stripCases = [];
-async function loadStrip() {
-  stripCases = await api(`/api/backtest/cases?calibrated=${S.calibrated}`);
-  const bt = S.backtest, s = S.calibrated ? bt.calibrated_on_test : bt.raw_on_test, raw = bt.raw_on_test;
-  const pct = v => Math.round(v * 100) + "%";
-  $("tiles").innerHTML = `
-    <div class="tile"><div class="k">Real time inside our range</div><div class="v">${pct(s.coverage)}</div><div class="d">target 80% · ${s.cases} outages · each storm left out in turn</div></div>
-    <div class="tile"><div class="k">We said too soon</div><div class="v">${pct(s.too_optimistic)}</div><div class="d">${S.calibrated ? "raw model: " + pct(raw.too_optimistic) : "the costly mistake"}</div></div>
-    <div class="tile"><div class="k">Typical range width</div><div class="v">${dur(s.median_range_width_h)}</div><div class="d">${S.calibrated ? "raw model: " + dur(raw.median_range_width_h) : "with calibration: " + dur(S.backtest.calibrated_on_test.median_range_width_h)}</div></div>`;
-  renderStrip();
-  renderPerStorm();
-}
-function renderPerStorm() {
-  const rows = S.backtest.per_storm || [];
-  const pct = v => v == null ? "–" : Math.round(v * 100) + "%";
-  $("per-storm").innerHTML = `<table><tr><th>Storm</th><th>Damage reports</th><th>Outages</th><th>Inside range</th><th>Typical width</th></tr>`
-    + rows.map(r => { const s = S.calibrated ? r.calibrated : r.raw;
-        return `<tr><td>${esc(r.date || r.storm)}${r.thin_history ? " ⚠" : ""}</td><td>${r.damage_reports}</td><td>${s.cases}</td><td>${pct(s.coverage)}</td><td>${dur(s.median_range_width_h)}</td></tr>`; }).join("")
-    + `</table>` + (rows.some(r => r.thin_history) ? `<div class="caveat">⚠ We had few past storms this size to learn from, so its ranges are marked low confidence.</div>` : "");
-}
-function renderStrip() {
-  const el = $("strip");
-  if (!stripCases.length) return;
-  const W = Math.max(300, el.clientWidth || 480), H = 200, m = { l: 36, r: 8, t: 8, b: 20 };
-  const cases = stripCases.slice().sort((a, b) => a.p50 - b.p50);
-  const tops = cases.map(c => Math.max(c.actual, c.p50)).sort((a, b) => a - b);
-  const q = tops[Math.floor(tops.length * 0.95)] || 48;
-  const yStep = q > 240 ? 72 : q > 96 ? 24 : 12;
-  const yMax = Math.max(24, Math.ceil(q / yStep) * yStep);
-  const fmtH = v => v >= 72 ? Math.round(v / 24) + "d" : v + "h";
-  const x = i => m.l + (i + 0.5) / cases.length * (W - m.l - m.r);
-  const y = h => m.t + (1 - Math.min(h, yMax) / yMax) * (H - m.t - m.b);
-  let g = "";
-  for (let v = 0; v <= yMax; v += yStep) g += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(v)}" y2="${y(v)}" stroke="var(--grid)"/><text x="${m.l - 6}" y="${y(v) + 4}" text-anchor="end">${fmtH(v)}</text>`;
-  g += `<text x="${m.l}" y="${H - 4}">Each column is one outage, sorted by our estimate</text>`;
-  const bw = Math.max(1.5, Math.min(3, (W - m.l - m.r) / cases.length - 1));
-  cases.forEach((c, i) => {
-    g += `<rect x="${x(i) - bw / 2}" y="${y(c.p90)}" width="${bw}" height="${Math.max(1, y(c.p10) - y(c.p90))}" rx="1" fill="var(--strip)"/>`;
-    if (c.inside) g += `<circle cx="${x(i)}" cy="${y(c.actual)}" r="2.6" fill="var(--series-1)"/>`;
-    else { const cx = x(i), cy = y(c.actual), k = 3; g += `<path d="M${cx - k},${cy - k}L${cx + k},${cy + k}M${cx - k},${cy + k}L${cx + k},${cy - k}" stroke="var(--critical)" stroke-width="1.6"/>`; }
-    g += `<rect class="hit" data-i="${i}" x="${x(i) - (W - m.l - m.r) / cases.length / 2}" y="${m.t}" width="${(W - m.l - m.r) / cases.length}" height="${H - m.t - m.b}" fill="transparent"/>`;
-  });
-  el.innerHTML = `<svg width="100%" viewBox="0 0 ${W} ${H}" role="img" aria-label="Backtest: each outage's predicted range and the real restoration time">${g}</svg>`;
-  el.querySelectorAll(".hit").forEach(h => {
-    const c = cases[+h.dataset.i];
-    h.addEventListener("mouseenter", e => showTip(e, `Range ${c.p10}–${c.p90} h (likely ${c.p50} h)\nReal: ${c.actual} h · ${c.inside ? "inside ✓" : "outside ✕"}`));
-    h.addEventListener("mousemove", moveTip);
-    h.addEventListener("mouseleave", hideTip);
-  });
-}
-
-// ---------- play ----------
-function togglePlay() {
-  if (S.playing) return stopPlay();
-  if (S.t >= +$("t").max) S.t = -PRE_H;
-  $("play").textContent = "❚❚"; $("play").setAttribute("aria-label", "Pause");
-  S.playing = setInterval(() => {
-    S.t = Math.min(+$("t").max, S.t + (S.t < 0 ? 3 : 0.5));
-    renderTime();
-    if (S.t >= +$("t").max) stopPlay();
-  }, 220);
-}
-function stopPlay() {
-  if (S.playing) clearInterval(S.playing);
-  S.playing = null; $("play").textContent = "▶"; $("play").setAttribute("aria-label", "Play storm replay");
-}
-
-init().catch(err => { document.querySelector("main").innerHTML = `<div class="card">Couldn't load: ${esc(err.message)}</div>`; });
+boot();
 </script>
 </body>
 </html>

@@ -181,7 +181,7 @@ The LLM calls the engines as tools: `get_risk`, `estimate_restoration`, `get_ale
 - [ ] Proactive alerts scheduler: pre-storm, outage confirmed, estimate updated, restored
 - [ ] Check-in call for a declared-medical persona (Twilio voice)
 - [ ] Offline storm plan (cacheable page + printable PDF)
-- [ ] Web view: family tree, uncertainty cone, 2–3 what-if sliders, replay timeline
+- [x] **NEW** Customer site (status front and center, large built-in assistant) and operations console (`/ops`) where staff fixes (crews, damage, repairs, confirmed times, notices) reach customers live
 - [x] **NEW** Swap fake data for the real extracts (`concierge/realdata.py` → `data/real/`)
 - [x] **NEW** Simulation ~30× faster (vectorized Monte Carlo) so estimates take ~1 s on real circuits
 - [x] **NEW** Ollama `Modelfile` for the chatbot (`outage-concierge`)

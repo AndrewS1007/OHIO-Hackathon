@@ -7,7 +7,7 @@ import hashlib
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
-from . import backtest, outbound, prep, rules, store
+from . import backtest, ops, outbound, prep, rules, store
 from .data import Dataset, get_dataset
 from .factcard import audit, build
 from .narrate import render
@@ -71,30 +71,51 @@ def risk_for(customer: dict, ds: Dataset | None = None) -> dict:
     return predict(customer["premise_id"], ds=ds)
 
 
+_EST_CACHE: dict = {}
+
+
+def _records(customer: dict, world: World | None, ds: Dataset):
+    """The replayed storm's records for this customer's circuit, with staff actions applied up to now."""
+    w = world or WORLD
+    return ops.records(ds, ds.circuit_of(customer["premise_id"]), w.t_h if w.phase == "outage" else None)
+
+
 def restoration_for(customer: dict, world: World = WORLD, ds: Dataset | None = None):
     ds = ds or get_dataset()
     pid = customer["premise_id"]
+    what_if = dict(world.what_if)
+    staff_crews = ops.crews_for(ds.circuit_of(pid), world.t_h if world.phase == "outage" else 0.0)
+    if staff_crews and "crews" not in what_if:
+        what_if["crews"] = staff_crews  # crews the operations team assigned to this circuit
+    key = (id(ds), pid, world.phase, round(world.t_h, 2), tuple(sorted(what_if.items())), ops.version())
+    if key in _EST_CACHE:
+        return _EST_CACHE[key]
     calib = backtest.live_calibration(ds)
     if world.phase == "pre_storm":
         sc = prestorm_scenario(pid, ds.current_storm, ds)
-        if world.what_if.get("crews"):
-            sc.crews = int(world.what_if["crews"])
-        sc.access = float(world.what_if.get("access", 1.0))
+        if what_if.get("crews"):
+            sc.crews = int(what_if["crews"])
+        sc.access = float(what_if.get("access", 1.0))
     else:
-        sc = scenario_at(ds, pid, ds.current_storm["replay_of_event"], world.t_h, world.what_if)
-    return estimate(pid, sc, n_sims=800, seed=7, ds=ds, calib=calib), sc
+        sc = scenario_at(ds, pid, ds.current_storm["replay_of_event"], world.t_h, what_if, recs=_records(customer, world, ds))
+    out = estimate(pid, sc, n_sims=800, seed=7, ds=ds, calib=calib), sc
+    if len(_EST_CACHE) > 512:
+        _EST_CACHE.clear()
+    _EST_CACHE[key] = out
+    return out
 
 
-def outage_start_h(customer: dict, ds: Dataset | None = None) -> float | None:
+def outage_start_h(customer: dict, ds: Dataset | None = None, world: World | None = None) -> float | None:
     ds = ds or get_dataset()
-    recs = event_records(ds, ds.current_storm["replay_of_event"], ds.circuit_of(customer["premise_id"]))
+    recs = _records(customer, world, ds)
     on_path = recs.loc[recs.device_id.isin(ds.path(customer["premise_id"]))]
     return None if on_path.empty else float(on_path.report_h.min())
 
 
-def restored_h(customer: dict, ds: Dataset | None = None) -> float | None:
+def restored_h(customer: dict, ds: Dataset | None = None, world: World | None = None) -> float | None:
+    """When power came back (from the records, closed earlier by staff repairs; inf while staff-logged damage is open)."""
     ds = ds or get_dataset()
-    recs = event_records(ds, ds.current_storm["replay_of_event"], ds.circuit_of(customer["premise_id"]))
+    recs = _records(customer, world, ds)
     on_path = recs.loc[recs.device_id.isin(ds.path(customer["premise_id"]))]
     return None if on_path.empty else float(on_path.done_h.max())
 
@@ -102,8 +123,20 @@ def restored_h(customer: dict, ds: Dataset | None = None) -> float | None:
 def is_out(customer: dict, world: World = WORLD) -> bool:
     if world.phase != "outage":
         return False
-    start, end = outage_start_h(customer), restored_h(customer)
+    start, end = outage_start_h(customer, world=world), restored_h(customer, world=world)
     return start is not None and start <= world.t_h < end
+
+
+def ops_lines(customer: dict, world: World, ds: Dataset) -> tuple[list[str], str | None]:
+    """What the operations team has confirmed for this customer: notices, and a confirmed restoration time."""
+    cid = ds.circuit_of(customer["premise_id"])
+    t = world.t_h if world.phase == "outage" else 0.0
+    lines = [n["text"] for n in ops.notices_for(cid, t)]
+    etr = ops.confirmed_etr(cid, t) if world.phase == "outage" else None
+    etr_txt = fmt_clock(STORM_START + timedelta(hours=etr), world.now(ds)) if etr is not None else None
+    if etr_txt and is_out(customer, world):
+        lines.insert(0, f"Our crews confirm power back by {etr_txt}.")
+    return lines, (etr_txt if is_out(customer, world) else None)
 
 
 # ---------- fact cards ----------
@@ -158,6 +191,11 @@ def make_card(kind: str, customer: dict, world: World = WORLD, extra: dict | Non
         raw["alerts"]["pre_storm_hours_before"] = plan["pre_storm_alert_hours_before"]
     if extra:
         raw.update({k: v for k, v in extra.items() if k != "battery_mode"})
+    staff, etr = ops_lines(customer, world, ds)
+    if staff:
+        raw["confirmed"] = list(raw.get("confirmed") or []) + staff
+    if etr and "restoration" in raw:
+        raw["restoration"]["confirmed_etr"] = etr
     return build(raw, audit_who=who(customer.get("phone", "anon")))
 
 
@@ -194,7 +232,7 @@ def proactive(session: Session, world: World = WORLD, ds: Dataset | None = None)
             send("pre_storm")
         return out
 
-    start, end = outage_start_h(c, ds), restored_h(c, ds)
+    start, end = outage_start_h(c, ds, world), restored_h(c, ds, world)
     if start is None or world.t_h < start:
         return out
     if world.t_h >= end:
@@ -243,6 +281,22 @@ def reset_world():
     WORLD.phase, WORLD.t_h, WORLD.what_if = "pre_storm", 0.0, {}
     SESSIONS.clear()
     store.clear()
+    ops.clear()
+
+
+def set_clock(storm_h: float, world: World = WORLD) -> dict[str, list[dict]]:
+    """Move the storm clock. Negative = the night before (forecast); moving back in time re-arms alerts."""
+    if storm_h < 0:
+        world.phase, world.t_h = "pre_storm", 0.0
+        persist()
+        return {}
+    if world.phase == "outage" and storm_h < world.t_h:
+        world.t_h = storm_h
+        for s in SESSIONS.values():
+            s.outage_announced = s.restored_announced = False
+            s.last_sent = s.last_scenario = None
+            s.escalations_sent = set()
+    return advance(storm_h, world)
 
 
 # ---------- persistence + delivery ----------

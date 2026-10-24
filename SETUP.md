@@ -13,7 +13,7 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 .venv/bin/python scripts/demo.py            # play the 3-minute demo story
 .venv/bin/python scripts/sms_sim.py         # text the bot from your terminal (you are Maria)
 .venv/bin/python -m pytest                  # 30 tests
-.venv/bin/uvicorn concierge.api:app --port 8000  # web view at http://localhost:8000
+.venv/bin/uvicorn concierge.api:app --port 8000  # customer site at /, operations console at /ops
 ```
 
 ## Turning on the AI concierge
@@ -54,6 +54,13 @@ Optional: `CONCIERGE_USE_LLM=1` also lets Claude reword the fixed alert texts (s
 | `concierge/service.py` | Demo storm clock, what-ifs, fact cards, proactive alerts | Channels |
 | `concierge/sms.py` | Inbound SMS: safety gate → linking → keywords → intent | Channels |
 | `concierge/api.py` | FastAPI: engines, demo controls, replay, backtest, Twilio SMS + voice webhooks | Channels |
+
+## Two web pages
+
+- **Customer site** (`/`): sign in to a demo account, see your outage status front and center, and chat with the outage assistant.
+- **Operations console** (`/ops`): staff see customers out, open repairs and who needs a person, and make fixes: set crews on a circuit, log damage, mark repairs done, confirm a restoration time, post notices. Every fix is saved (`concierge/ops.py`, SQLite) and applied before any estimate, so it reaches the customer site, the assistant and SMS alerts right away. Every fix can be undone. The storm clock at the top drives the replay.
+
+See [DEMO.md](DEMO.md) for the presentation walkthrough.
 
 ## Demo controls
 

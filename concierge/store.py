@@ -22,6 +22,10 @@ CREATE TABLE IF NOT EXISTS messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT, phone TEXT NOT NULL, ts TEXT NOT NULL,
     direction TEXT NOT NULL, text TEXT NOT NULL, kind TEXT, status TEXT);
 CREATE INDEX IF NOT EXISTS messages_phone ON messages (phone, id);
+CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS ops_actions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT NOT NULL, storm_h REAL NOT NULL, kind TEXT NOT NULL,
+    circuit_id TEXT, payload TEXT NOT NULL, author TEXT, undone INTEGER NOT NULL DEFAULT 0);
 """
 
 
@@ -109,3 +113,46 @@ def delete_thread(phone: str) -> None:
 def clear() -> None:
     with _conn() as c:
         c.executescript("DELETE FROM sessions; DELETE FROM world; DELETE FROM messages;")
+
+
+# ---------- operations actions (staff fixes) ----------
+
+_OPS_COLS = ("id", "ts", "storm_h", "kind", "circuit_id", "payload", "author", "undone")
+
+
+def _ops_row(r) -> dict:
+    d = dict(zip(_OPS_COLS, r))
+    d["payload"], d["undone"] = json.loads(d["payload"]), bool(d["undone"])
+    return d
+
+
+def add_ops_action(kind: str, circuit_id: str | None, payload: dict, storm_h: float, author: str = "ops") -> dict:
+    with _conn() as c:
+        cur = c.execute("INSERT INTO ops_actions (ts, storm_h, kind, circuit_id, payload, author) VALUES (?, ?, ?, ?, ?, ?)",
+                        (datetime.now().isoformat(timespec="seconds"), storm_h, kind, circuit_id, json.dumps(payload), author))
+        row = c.execute(f"SELECT {', '.join(_OPS_COLS)} FROM ops_actions WHERE id = ?", (cur.lastrowid,)).fetchone()
+    return _ops_row(row)
+
+
+def ops_actions() -> list[dict]:
+    with _conn() as c:
+        return [_ops_row(r) for r in c.execute(f"SELECT {', '.join(_OPS_COLS)} FROM ops_actions ORDER BY id")]
+
+
+def undo_ops_action(action_id: int) -> None:
+    with _conn() as c:
+        c.execute("UPDATE ops_actions SET undone = 1 WHERE id = ?", (action_id,))
+
+
+def clear_ops() -> None:
+    with _conn() as c:
+        c.execute("DELETE FROM ops_actions")
+        c.execute("INSERT INTO meta (k, v) VALUES ('reset_at', ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v",
+                  (datetime.now().isoformat(timespec="seconds"),))
+
+
+def reset_at() -> str:
+    """When the demo was last reset (staff queue items older than this are hidden)."""
+    with _conn() as c:
+        row = c.execute("SELECT v FROM meta WHERE k = 'reset_at'").fetchone()
+    return row[0] if row else ""

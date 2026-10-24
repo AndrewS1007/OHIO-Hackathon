@@ -1,6 +1,8 @@
 """HTTP API.  Run:  uvicorn concierge.api:app --reload
 
-Web view / judges:  /api/premises/{id}/..., /api/demo/..., /api/replay/..., /api/backtest
+Customer site:      /            (+ /api/accounts, /api/me/{premise_id}, /api/chat)
+Operations console: /ops         (+ /api/ops/...: overview, circuits, fixes, clock)
+Engines:            /api/premises/{id}/..., /api/replay/..., /api/backtest
 Twilio webhooks:    POST /sms/twilio (Messaging), POST /voice/twilio (Voice)
 """
 from __future__ import annotations
@@ -13,15 +15,17 @@ from xml.sax.saxutils import escape
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, Response
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import agent, backtest, replay, rules, safety, service, sms, store, views
+from . import agent, backtest, ops, portal, replay, rules, safety, service, sms, store, views
 from .config import ROOT
 from .data import get_dataset
 from .factcard import recent_audit
 from .risk import predict
 
 app = FastAPI(title="Built for the Dark: AI Outage Concierge")
+app.mount("/static", StaticFiles(directory=ROOT / "web"), name="static")
 
 
 @app.on_event("startup")
@@ -43,6 +47,94 @@ def _customer(premise_id: str) -> dict:
 @app.get("/")
 def web_view():
     return FileResponse(ROOT / "web" / "index.html")
+
+
+@app.get("/ops")
+def ops_console():
+    return FileResponse(ROOT / "web" / "ops.html")
+
+
+# ---------- customer site ----------
+
+@app.get("/api/state")
+def get_state():
+    return portal.clock()
+
+
+@app.get("/api/accounts")
+def get_accounts():
+    return portal.accounts()
+
+
+@app.get("/api/me/{premise_id}")
+def get_me(premise_id: str):
+    return portal.customer_status(_customer(premise_id))
+
+
+# ---------- operations console ----------
+
+class OpsAction(BaseModel):
+    kind: str
+    circuit_id: str | None = None
+    payload: dict = {}
+
+
+class Clock(BaseModel):
+    to_h: float
+
+
+def _now_h() -> float:
+    return service.WORLD.t_h if service.WORLD.phase == "outage" else 0.0
+
+
+@app.get("/api/ops/overview")
+def ops_overview():
+    return {**ops.overview(_now_h()), "clock": portal.clock(), "escalations": len(portal.escalations())}
+
+
+@app.get("/api/ops/circuits/{circuit_id}")
+def ops_circuit(circuit_id: str):
+    if circuit_id not in set(get_dataset().circuits.circuit_id):
+        raise HTTPException(404, "Unknown circuit")
+    return portal.circuit_detail(circuit_id)
+
+
+@app.get("/api/ops/escalations")
+def ops_escalations():
+    return portal.escalations()
+
+
+@app.get("/api/ops/actions")
+def ops_actions():
+    return portal.action_log()
+
+
+@app.post("/api/ops/actions")
+def ops_add(a: OpsAction):
+    try:
+        act = ops.add(a.kind, a.payload, _now_h(), a.circuit_id)
+    except (ops.OpsError, KeyError, TypeError, ValueError) as e:
+        raise HTTPException(400, str(e))
+    sent = service.broadcast()  # texts to SMS customers whose estimate this changed
+    return {"action": act, "texts_sent": sum(len(v) for v in sent.values())}
+
+
+@app.post("/api/ops/actions/{action_id}/undo")
+def ops_undo(action_id: int):
+    ops.undo(action_id)
+    return {"ok": True}
+
+
+@app.post("/api/ops/clock")
+def ops_clock(c: Clock):
+    sent = service.set_clock(c.to_h)
+    return {"clock": portal.clock(), "texts_sent": sum(len(v) for v in sent.values())}
+
+
+@app.post("/api/ops/reset")
+def ops_reset():
+    service.reset_world()
+    return {"clock": portal.clock()}
 
 
 @app.get("/api")
@@ -155,7 +247,7 @@ class Chat(BaseModel):
     premise_id: str
     message: str
     conversation_id: str
-    t: float = -18.0  # storm hour on the web view's clock (negative = before the storm)
+    t: float | None = None  # storm hour (negative = before the storm); default: the live storm clock
     crews: int | None = None
     extra_poles: int = 0
     access: float = 1.0
@@ -184,7 +276,10 @@ def chat(m: Chat):
         return {"text": gate.reply, "source": "safety_gate", "gate": gate.kind, "category": gate.category, "steps": []}
     what_if = {k: v for k, v in {"crews": m.crews, "extra_poles": m.extra_poles,
                                  "access": m.access if m.access != 1.0 else None}.items() if v}
-    world = service.World("pre_storm" if m.t < 0 else "outage", max(m.t, 0.0), what_if)
+    if m.t is None:
+        world = service.World(service.WORLD.phase, service.WORLD.t_h, what_if)
+    else:
+        world = service.World("pre_storm" if m.t < 0 else "outage", max(m.t, 0.0), what_if)
     ctx = agent.ChatContext(c, world, channel="web", who="web-" + m.conversation_id[:8])
     return agent.answer("web-" + m.conversation_id + "-" + m.premise_id, text, ctx)
 
