@@ -48,7 +48,22 @@ def scenario_at(ds: Dataset, premise_id: str, event_id: str, t: float, what_if: 
     if base_lambda is None:
         base_lambda = prestorm_scenario(premise_id, {"max_wind_mph": storm.max_wind_mph}, ds).hidden_lambda
     return Scenario(crews=crews, access=float(what_if.get("access", 1.0)), now_h=t,
-                    hidden_lambda=hidden_lambda(base_lambda, len(known), t), jobs=jobs)
+                    hidden_lambda=hidden_lambda(base_lambda, len(known), t), jobs=jobs,
+                    system_reports=system_reports(ds, event_id, t))
+
+
+def _event_report_hours(ds: Dataset, event_id: str):
+    cache = ds.__dict__.setdefault("_report_hours", {})
+    if event_id not in cache:
+        start = ds.storms.loc[ds.storms.event_id == event_id, "start_time"].iloc[0]
+        ev = ds.damage.loc[ds.damage.event_id == event_id, "report_time"]
+        cache[event_id] = ((ev - start).dt.total_seconds() / 3600).to_numpy()
+    return cache[event_id]
+
+
+def system_reports(ds: Dataset, event_id: str, t: float) -> int:
+    """How much damage had been reported across the whole system by storm hour t (a live storm-size signal)."""
+    return int((_event_report_hours(ds, event_id) <= t).sum())
 
 
 def _p50_abs(est: dict) -> float:

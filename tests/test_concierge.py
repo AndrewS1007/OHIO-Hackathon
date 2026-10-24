@@ -216,3 +216,45 @@ def test_chat_endpoint_safety_gate_skips_ai(monkeypatch):
     assert r["source"] == "safety_gate" and "911" in r["text"]
     r = c.post("/api/chat", json={"premise_id": MARIA["premise_id"], "message": "Why is it taking so long?", "conversation_id": "x", "t": 7}).json()
     assert r["source"] == "simulated" and r["grounded"]
+
+
+# ---------- honesty score: leave-one-storm-out + size-aware calibration ----------
+
+from concierge import backtest
+from concierge.restoration import pick_calibration
+
+
+def test_backtest_scores_every_storm_left_out():
+    r = backtest.run()
+    assert r["method"] == "leave-one-storm-out"
+    stormed = {s["event_id"] for s in r["per_storm"]}
+    assert stormed == set(backtest.cases().event_id)  # every storm with outages gets its own row
+    assert sum(s["calibrated"]["cases"] for s in r["per_storm"]) == r["calibrated_on_test"]["cases"]
+
+
+def test_calibration_never_sees_the_storm_it_scores(monkeypatch):
+    seen = []
+    real_fit = backtest.fit_by_size
+    monkeypatch.setattr(backtest, "fit_by_size", lambda df: (seen.append(set(df.event_id)), real_fit(df))[1])
+    backtest.leave_one_storm_out.cache_clear()
+    try:
+        backtest.leave_one_storm_out()
+        all_storms = set(backtest.cases().event_id)
+        assert len(seen) == len(all_storms)
+        assert all(len(all_storms - s) == 1 for s in seen)  # each fit is missing exactly one storm
+    finally:
+        backtest.leave_one_storm_out.cache_clear()
+
+
+def test_thin_history_falls_back_and_says_so():
+    model = {"pooled": {"p10": -0.2, "p50": 0.2, "p90": 1.0}, "small": {"p10": -0.1, "p50": 0.1, "p90": 0.5},
+             "large": None, "support": {"small": 200, "large": 3}}
+    offsets, info = pick_calibration(model, 5000)  # a huge storm we have little history for
+    assert offsets == model["pooled"] and info["thin_history"]
+    offsets, info = pick_calibration(model, 10)
+    assert offsets == model["small"] and not info["thin_history"]
+
+
+def test_backtest_is_cached_to_disk():
+    files = list(backtest.CACHE_DIR.glob("backtest_cases_*.csv"))
+    assert files, "first run should write the cache"

@@ -19,7 +19,7 @@ ALLOWED_KEYS = {
     "confirmed", "estimate", "actions", "reasons_changed", "power_budget",
     "alerts", "eligible", "enrolled", "channels", "pre_storm_hours_before", "eligibility_reason",
     "honesty", "battery_mode", "declared_needs", "fallback", "general_guidance", "restored_at",
-    "safety", "is_model_estimate", "hour", "what",
+    "safety", "is_model_estimate", "hour", "what", "note",
 }
 SENSITIVE = [
     re.compile(r"\bC\d{2}(-[A-Z]\d?)+\b"),  # device / circuit ids

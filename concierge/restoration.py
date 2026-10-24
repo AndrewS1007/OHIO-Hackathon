@@ -58,6 +58,7 @@ class Scenario:
     now_h: float = 0.0
     hidden_lambda: float = 1.0  # expected not-yet-found damage jobs on the circuit
     jobs: list[Job] = field(default_factory=list)
+    system_reports: int | None = None  # damage reports so far across the whole system (storm size, known live)
 
 
 def damage_label(damage_type: str, n: int) -> str:
@@ -187,15 +188,43 @@ def apply_calibration(h: dict, calib: dict, now_h: float) -> dict:
     return out
 
 
+LARGE_STORM_REPORTS = 100  # system-wide damage reports so far at which a storm counts as "large"
+MIN_BUCKET_CASES = 15  # fewer past outages than this in a size group -> use all storms, and say so
+
+
+def storm_size(system_reports: int | None) -> str | None:
+    import os
+    if system_reports is None:
+        return None
+    cut = int(os.environ.get("CONCIERGE_LARGE_STORM_REPORTS", LARGE_STORM_REPORTS))
+    return "large" if system_reports >= cut else "small"
+
+
+def pick_calibration(calib: dict, system_reports: int | None) -> tuple[dict, dict]:
+    """calib is either one set of offsets, or {"pooled", "small", "large", "support"} from the backtest.
+    Returns (offsets, info). info["thin_history"] is True when we haven't seen enough storms this size."""
+    if "pooled" not in calib:
+        return calib, {"group": "all", "thin_history": False}
+    size = storm_size(system_reports)
+    if size is None:
+        return calib["pooled"], {"group": "all", "thin_history": False}
+    n = calib["support"].get(size, 0)
+    if calib.get(size) and n >= MIN_BUCKET_CASES:
+        return calib[size], {"group": size, "thin_history": False, "past_cases": n}
+    return calib["pooled"], {"group": "all", "thin_history": True, "size": size, "past_cases": n}
+
+
 def estimate(premise_id: str, sc: Scenario, n_sims: int = 1000, seed: int = 0, ds: Dataset | None = None,
              calib: dict | None = None) -> dict:
     ds = ds or get_dataset()
     res = simulate(premise_id, sc, n_sims, seed, ds)
     res["now_h"] = sc.now_h
     if calib and res.get("hours_from_now"):
+        offsets, info = pick_calibration(calib, sc.system_reports)
         res["raw_hours_from_now"] = res["hours_from_now"]
-        res["hours_from_now"] = apply_calibration(res["hours_from_now"], calib, sc.now_h)
+        res["hours_from_now"] = apply_calibration(res["hours_from_now"], offsets, sc.now_h)
         res["calibrated"] = True
+        res["calibration"] = info
     res["drivers"] = drivers(premise_id, sc, ds)
     res["assumptions"] = {
         "crews": sc.crews,

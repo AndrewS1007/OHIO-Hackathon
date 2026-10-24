@@ -132,6 +132,7 @@ svg .ink { fill: var(--ink); } svg .ink2 { fill: var(--ink-2); }
 details { margin-top: 10px; font-size: 13px; color: var(--ink-2); }
 summary { cursor: pointer; }
 table { border-collapse: collapse; width: 100%; font-size: 12.5px; margin-top: 6px; }
+#per-storm td:first-child { white-space: nowrap; }
 th, td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--grid); font-variant-numeric: tabular-nums; }
 
 /* tree */
@@ -253,7 +254,7 @@ th, td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--grid
 
   <section class="card" id="c-honesty">
     <h2>Honesty scorecard</h2>
-    <p class="lede">How often did the real restoration time land inside our range? Tested on storms the model never saw.</p>
+    <p class="lede">How often did the real restoration time land inside our range? Each storm is scored by a model trained on the other storms only.</p>
     <div class="seg" id="calib" style="margin-bottom:10px">
       <button data-v="0" aria-pressed="false">Before calibration</button>
       <button data-v="1" aria-pressed="true">After calibration</button>
@@ -265,6 +266,7 @@ th, td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--grid
       <span><span style="color:var(--series-1)">●</span> Real time, inside range</span>
       <span><span style="color:var(--critical)">✕</span> Real time, outside range</span>
     </div>
+    <details open><summary>Storm by storm</summary><div id="per-storm"></div></details>
     <details><summary>Alert and escalation rules</summary><ol id="rules"></ol></details>
     <div class="caveat">Built on made-up data, so these numbers show the method, not real-world accuracy.</div>
   </section>
@@ -424,7 +426,7 @@ function renderLanes() {
     ok = `<div class="big">Power out since ${esc(clockAt(R.outage_h))}</div>${list(fixed)}`;
     const s = stepAt(t), ev = latestEvent(t);
     const c = ev && ev.card && ev.card.restoration;
-    est = s ? `<div class="big">Back ~${esc(clockAt(s.p50))}</div><div>Window ${esc(clockAt(s.p10))}–${esc(clockAt(s.p90))}${c ? " · " + esc(c.confidence) + " confidence" : ""}</div>${c ? list(c.drivers.slice(0, 3)) : ""}<div class="note">Model estimate, not a promise.</div>` : "";
+    est = s ? `<div class="big">Back ~${esc(clockAt(s.p50))}</div><div>Window ${esc(clockAt(s.p10))}–${esc(clockAt(s.p90))}${c ? " · " + esc(c.confidence) + " confidence" : ""}</div>${c ? list(c.drivers.slice(0, 3)) : ""}${c && c.note ? `<div class="note">⚠ ${esc(c.note)}</div>` : ""}<div class="note">Model estimate, not a promise.</div>` : "";
     act = list((ev && ev.card ? ev.card.actions : []).slice(0, 4));
   } else if (back) {
     ok = `<div class="big">Power restored at ${esc(clockAt(R.restored_h))}</div><div>Out for ${Math.round(R.restored_h - R.outage_h)} h.</div>`;
@@ -671,10 +673,19 @@ async function loadStrip() {
   const bt = S.backtest, s = S.calibrated ? bt.calibrated_on_test : bt.raw_on_test, raw = bt.raw_on_test;
   const pct = v => Math.round(v * 100) + "%";
   $("tiles").innerHTML = `
-    <div class="tile"><div class="k">Real time inside our range</div><div class="v">${pct(s.coverage)}</div><div class="d">target 80% · ${s.cases} outages</div></div>
+    <div class="tile"><div class="k">Real time inside our range</div><div class="v">${pct(s.coverage)}</div><div class="d">target 80% · ${s.cases} outages · each storm left out in turn</div></div>
     <div class="tile"><div class="k">We said too soon</div><div class="v">${pct(s.too_optimistic)}</div><div class="d">${S.calibrated ? "was " + pct(raw.too_optimistic) + " before calibration" : "the costly mistake"}</div></div>
     <div class="tile"><div class="k">Typical range width</div><div class="v">${s.median_range_width_h} h</div><div class="d">${S.calibrated ? "was " + raw.median_range_width_h + " h: honesty costs precision" : "narrow but often wrong"}</div></div>`;
   renderStrip();
+  renderPerStorm();
+}
+function renderPerStorm() {
+  const rows = S.backtest.per_storm || [];
+  const pct = v => v == null ? "–" : Math.round(v * 100) + "%";
+  $("per-storm").innerHTML = `<table><tr><th>Storm</th><th>Damage reports</th><th>Outages</th><th>Inside range</th><th>Typical width</th></tr>`
+    + rows.map(r => { const s = S.calibrated ? r.calibrated : r.raw;
+        return `<tr><td>${esc(r.date || r.storm)}${r.thin_history ? " ⚠" : ""}</td><td>${r.damage_reports}</td><td>${s.cases}</td><td>${pct(s.coverage)}</td><td>${s.median_range_width_h ?? "–"} h</td></tr>`; }).join("")
+    + `</table>` + (rows.some(r => r.thin_history) ? `<div class="caveat">⚠ We had few past storms this size to learn from, so its ranges are marked low confidence.</div>` : "");
 }
 function renderStrip() {
   const el = $("strip");

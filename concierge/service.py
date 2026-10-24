@@ -58,7 +58,9 @@ def fmt_clock(dt: datetime, now: datetime) -> str:
     return s if dt.date() == now.date() else f"{dt.strftime('%a')} {s}"
 
 
-def _conf(h: dict) -> str:
+def _conf(h: dict, est: dict | None = None) -> str:
+    if est and est.get("calibration", {}).get("thin_history"):
+        return "low"  # we haven't seen enough storms this size to trust the range
     spread = (h["p90"] - h["p10"]) / max(h["p50"], 1)
     return "high" if spread < 1.0 else "medium" if spread < 2.0 else "low"
 
@@ -135,10 +137,12 @@ def make_card(kind: str, customer: dict, world: World = WORLD, extra: dict | Non
             "window": f"{fmt_clock(now + timedelta(hours=h['p10']), now)}-{fmt_clock(now + timedelta(hours=h['p90']), now)}",
             "likely": fmt_clock(now + timedelta(hours=h["p50"]), now),
             "hours_range": f"{round(h['p10'])}-{round(h['p90'])} hrs",
-            "confidence": _conf(h),
+            "confidence": _conf(h, est),
             "drivers": est["drivers"],
             "step_restoration": est["step_restoration"],
         }
+        if est.get("calibration", {}).get("thin_history"):
+            raw["restoration"]["note"] = "We haven't seen many storms this big, so this range is less certain than usual."
         if est["step_restoration"] and est.get("upstream_fixed_p50") is not None:
             raw["restoration"]["upstream_first_by"] = fmt_clock(now + timedelta(hours=est["upstream_fixed_p50"]), now)
         p90_total = h["p90"]
