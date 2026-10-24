@@ -1,0 +1,12 @@
+# 1. Install Ollama (Linux/WSL)
+curl -fsSL https://ollama.com/install.sh | sh
+
+# 2. Download and start the Llama 3.1 model
+ollama run llama3.1
+# (Wait for it to say "success" and open a prompt. Then press Ctrl+D to exit the chat. The server will stay running in the background!)
+
+# 3. Activate the virtual environment (if not already active)
+source .venv/bin/activate
+
+# 4. Start the backend with the AI turned on
+CONCIERGE_USE_LLM=1 python -m uvicorn concierge.api:app --reload

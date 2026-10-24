@@ -135,30 +135,40 @@ Rules:
 - At most {max_chars} characters. Output only the message text."""
 
 
-def _llm_enabled() -> bool:
-    return os.environ.get("CONCIERGE_USE_LLM") == "1"
+import httpx
+import json
 
+def _llm_enabled() -> bool:
+    # Always turn on if the variable is set
+    return os.environ.get("CONCIERGE_USE_LLM") == "1"
 
 def _llm_rewrite(card: dict, draft: str, max_chars: int) -> str | None:
     try:
-        import anthropic
-        client = anthropic.Anthropic()
-        resp = client.beta.messages.create(
-            model=MODEL,
-            max_tokens=1024,
-            output_config={"effort": "low"},
-            betas=["server-side-fallback-2026-07-01"],
-            fallbacks="default",
-            system=SYSTEM.format(max_chars=max_chars),
-            messages=[{"role": "user", "content": f"FACT CARD:\n{json.dumps(card, ensure_ascii=False)}\n\nDRAFT:\n{draft}"}],
+        system_prompt = SYSTEM.format(max_chars=max_chars)
+        user_prompt = f"FACT CARD:\n{json.dumps(card, ensure_ascii=False)}\n\nDRAFT:\n{draft}"
+        
+        # Call the local Ollama API
+        response = httpx.post(
+            "http://localhost:11434/api/chat",
+            json={
+                "model": "llama3.1", # Match the model you downloaded
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                "stream": False
+            },
+            timeout=30.0 # Give your local machine a bit of time to think
         )
-    except Exception as e:  # network, auth, rate limit: the template still works
+        response.raise_for_status()
+        
+        text = response.json().get("message", {}).get("content", "").strip()
+        return text or None
+        
+    except Exception as e:
+        from .factcard import audit
         audit("llm_error", "system", repr(e))
         return None
-    if resp.stop_reason == "refusal":
-        return None
-    text = "".join(b.text for b in resp.content if b.type == "text").strip()
-    return text or None
 
 
 def render(card: dict, emoji: bool = True, max_segments: int = 2, use_llm: bool | None = None) -> dict:
