@@ -203,6 +203,14 @@ def test_update_rule_ignores_jitter_but_sends_real_changes():
     assert send and "battery" in why  # P90 crossed Maria's 8 h CPAP limit
 
 
+def test_power_budget_only_mentions_declared_needs():
+    cpap = prep.power_budget([{"need": "CPAP", "battery_hours": 8}], p10=10, p90=30)
+    nothing = prep.power_budget([], p10=10, p90=30)
+    insulin = prep.power_budget([{"need": "insulin_fridge", "battery_hours": 4}], p10=10, p90=30)
+    assert not any("insulin" in i["what"].lower() for i in cpap + nothing)
+    assert any("insulin" in i["what"].lower() for i in insulin)
+
+
 def test_power_budget_risk_levels():
     items = prep.power_budget([{"need": "CPAP", "battery_hours": 8}], p10=10, p90=30)
     assert [i["hour"] for i in items] == [4, 8] and all(i["risk"] == "likely" for i in items)

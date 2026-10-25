@@ -71,7 +71,7 @@ def customer_status(c: dict, ds: Dataset | None = None) -> dict:
         "storm": card.get("storm"), "risk": card.get("risk"), "fallback": card.get("fallback", False),
         "general_guidance": card.get("general_guidance"), "estimate": card.get("restoration"),
         "actions": card.get("actions", []), "honesty": card.get("honesty"),
-        "notices": [{"text": n["text"], "level": n["level"], "scope": n["scope"]}
+        "notices": [{"text": n["text"], "level": n["level"], "scope": n["scope"], "posted": label_at(n["storm_h"])}
                     for n in ops.notices_for(cid, w.t_h if w.phase == "outage" else 0.0)],
         "power_budget": plan.get("power_budget", []), "declared_needs": card.get("declared_needs", []),
         "alerts": alerts, "version": ops.version(),
@@ -79,6 +79,20 @@ def customer_status(c: dict, ds: Dataset | None = None) -> dict:
 
 
 # ---------- operations console ----------
+
+def account_statuses(ds: Dataset | None = None) -> list[dict]:
+    """The demo accounts as staff see them: who is out right now, and what they're being told."""
+    ds = ds or get_dataset()
+    out = []
+    for c in _known_customers(ds)[:12]:
+        s = customer_status(c, ds)
+        e = s["estimate"] or {}
+        out.append({"name": c["name"], "account": account_label(c), "premise_id": c["premise_id"],
+                    "circuit_id": ds.circuit_of(c["premise_id"]), "state": s["state"], "outage_since": s["outage_since"],
+                    "restored_at": s["restored_at"], "told": e.get("confirmed_etr") or e.get("likely"),
+                    "confirmed": bool(e.get("confirmed_etr")), "risk": (s["risk"] or {}).get("band"),
+                    "needs": s["declared_needs"]})
+    return out
 
 def _known_customers(ds: Dataset) -> list[dict]:
     seen, out = set(), []

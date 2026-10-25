@@ -6,50 +6,85 @@
 <title>Storm Operations</title>
 <link rel="stylesheet" href="/static/app.css">
 <style>
-.wrap { max-width: 1560px; margin: 0 auto; padding: 18px 24px 40px; display: grid; gap: 16px; }
-.clockbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
-.clockbar .now { font-size: 20px; font-weight: 750; font-variant-numeric: tabular-nums; min-width: 92px; }
-.clockbar input[type=range] { flex: 1; min-width: 180px; accent-color: var(--brand); }
-.kpis { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
-.kpi { padding: 14px 16px; }
-.kpi .k { color: var(--muted); font-size: 13px; font-weight: 600; }
-.kpi .v { font-size: 28px; font-weight: 750; letter-spacing: -.01em; font-variant-numeric: tabular-nums; }
+.card { border-radius: 10px; box-shadow: none; padding: 20px 22px; }
+.wrap { max-width: 1600px; margin: 0 auto; padding: 24px 28px 48px; display: grid; gap: 24px; }
+.topbar { padding: 14px 28px; }
+.wordmark { display: flex; align-items: center; gap: 10px; font-weight: 750; font-size: 18px; }
+.wordmark svg { width: 24px; height: 24px; color: var(--brand); }
+.btn { border-radius: 6px; }
+
+.clockbar { display: grid; gap: 14px; }
+.clockbar .top { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 24px; }
+.clockbar .now { font-size: 24px; font-weight: 750; font-variant-numeric: tabular-nums; }
+.clockbar .group { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+.clockbar .slide { display: flex; align-items: center; gap: 14px; }
+.clockbar input[type=range] { flex: 1; accent-color: var(--brand); }
+
+.kpis { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 16px; }
+.kpi .k { color: var(--ink-2); font-size: 14px; font-weight: 600; }
+.kpi .v { font-size: 32px; font-weight: 750; letter-spacing: -.01em; font-variant-numeric: tabular-nums; margin: 4px 0 2px; }
 .kpi .d { color: var(--muted); font-size: 13px; }
 .kpi.alert .v { color: var(--bad); }
-.grid { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1.35fr) minmax(300px, .85fr); gap: 16px; align-items: start; }
-.stack { display: grid; gap: 16px; }
-.scroll { max-height: 640px; overflow: auto; margin: 0 -8px; }
-.head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+
+.grid { display: grid; grid-template-columns: minmax(340px, 420px) minmax(0, 1fr); gap: 24px; align-items: start; }
+.side { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; align-items: start; }
+@media (min-width: 1700px) {
+  .grid { grid-template-columns: minmax(340px, 420px) minmax(0, 1fr) 360px; }
+  .side { grid-column: auto; grid-template-columns: 1fr; }
+}
+.head { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
 .head h2 { margin: 0; }
-.detail h3 { font-size: 22px; font-weight: 750; }
-.facts { display: flex; flex-wrap: wrap; gap: 6px 16px; color: var(--ink-2); font-size: 14px; margin-top: 4px; }
-.section { border-top: 1px solid var(--line); padding-top: 14px; margin-top: 14px; }
-.section h2 { margin-bottom: 8px; }
-.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-.est { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; }
-.est .l { color: var(--muted); font-size: 13px; }
-.stepper { display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
-.stepper button { border: 0; background: var(--surface-2); width: 34px; height: 34px; cursor: pointer; font-size: 18px; }
-.stepper span { min-width: 44px; text-align: center; font-weight: 700; font-variant-numeric: tabular-nums; }
-.queue { display: grid; gap: 8px; }
-.q { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
-.q .t { display: flex; gap: 8px; align-items: center; font-weight: 650; }
-.q .w { color: var(--ink-2); font-size: 13px; margin-top: 2px; }
-.log { display: grid; gap: 6px; font-size: 13px; }
-.log .e { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: start; padding: 6px 0; border-bottom: 1px solid var(--line); }
+h2 { font-size: 16px; }
+.scroll { max-height: 640px; overflow: auto; margin: 0 -10px; }
+table.data td { padding: 11px 10px; }
+table.data th { padding: 8px 10px; }
+
+.detail h3 { font-size: 24px; font-weight: 750; }
+.facts { display: flex; flex-wrap: wrap; gap: 6px 22px; color: var(--ink-2); font-size: 15px; margin-top: 6px; }
+.section { border-top: 1px solid var(--line); padding-top: 20px; margin-top: 20px; }
+.section h2 { margin-bottom: 12px; }
+.row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.est { display: grid; grid-template-columns: 120px 1fr; gap: 8px 16px; line-height: 1.5; }
+.est .l { color: var(--muted); font-size: 14px; }
+.stepper { display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.stepper button { border: 0; background: var(--surface-2); width: 38px; height: 38px; cursor: pointer; font-size: 18px; }
+.stepper span { min-width: 48px; text-align: center; font-weight: 700; font-variant-numeric: tabular-nums; }
+.repairs { max-height: 340px; overflow: auto; margin: 0 -10px; }
+details.more { border-top: 1px solid var(--line); margin-top: 20px; padding-top: 16px; }
+details.more summary { cursor: pointer; font-weight: 650; font-size: 16px; list-style: none; display: flex; align-items: center; gap: 8px; }
+details.more summary::before { content: "+"; display: inline-grid; place-items: center; width: 20px; height: 20px; border: 1px solid var(--line); border-radius: 4px; font-weight: 600; color: var(--muted); }
+details.more[open] summary::before { content: "−"; }
+details.more summary::-webkit-details-marker { display: none; }
+details.more .body { margin-top: 14px; }
+
+.queue { display: grid; gap: 10px; }
+.accts { display: grid; }
+.acct-row { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.acct-row:last-child { border-bottom: 0; }
+.acct-row .n { font-weight: 650; }
+.acct-row .st { font-size: 14px; font-weight: 600; }
+.acct-row .st.out { color: var(--bad); } .acct-row .st.on { color: var(--good); } .acct-row .st.storm { color: var(--warn); }
+.acct-row .told { grid-column: 1 / -1; font-size: 13px; color: var(--ink-2); }
+.q { border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; }
+.q .t { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-weight: 650; }
+.q .w { color: var(--ink-2); font-size: 14px; margin-top: 4px; }
+.log { display: grid; font-size: 14px; }
+.log .e { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: start; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.log .e:last-child { border-bottom: 0; }
 .log .e.undone { color: var(--muted); text-decoration: line-through; }
 .empty { color: var(--muted); font-size: 14px; }
-textarea.field { width: 100%; resize: vertical; min-height: 60px; }
-.bar { height: 6px; background: var(--surface-2); border-radius: 3px; overflow: hidden; min-width: 50px; }
+textarea.field { width: 100%; resize: vertical; min-height: 72px; margin-top: 4px; }
+.bar { height: 6px; background: var(--surface-2); border-radius: 3px; overflow: hidden; width: 64px; display: inline-block; vertical-align: middle; margin-left: 10px; }
 .bar i { display: block; height: 100%; background: var(--bad); }
 .tag { font-size: 12px; color: var(--muted); }
-@media (max-width: 1280px) { .grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); } .grid > .stack:last-child { grid-column: 1 / -1; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); } }
-@media (max-width: 900px) { .grid { grid-template-columns: 1fr; } .kpis { grid-template-columns: repeat(2, 1fr); } .wrap { padding: 14px 16px 30px; } }
+.ok-mark { color: var(--good); font-weight: 700; }
+@media (max-width: 1100px) { .kpis { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 860px) { .grid, .side { grid-template-columns: 1fr; } .kpis { grid-template-columns: repeat(2, 1fr); } .wrap { padding: 16px 16px 32px; gap: 16px; } }
 </style>
 </head>
 <body>
 <header class="topbar">
-  <div class="brand"><span class="mark" aria-hidden="true">⚡</span>Storm Operations</div>
+  <div class="wordmark"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z"/></svg>Storm Operations</div>
   <span class="pill info" id="storm-chip">…</span>
   <div class="spacer"></div>
   <a class="btn" href="/" target="_blank" rel="noopener">Customer site ↗</a>
@@ -57,15 +92,14 @@ textarea.field { width: 100%; resize: vertical; min-height: 60px; }
 
 <main class="wrap">
   <section class="card clockbar" aria-label="Storm clock">
-    <div><div class="small muted">Storm clock</div><div class="now" id="now">—</div></div>
-    <button class="btn" data-to="-1">Night before</button>
-    <button class="btn" data-to="0">Storm hits</button>
-    <button class="btn" data-step="-1">−1 h</button>
-    <button class="btn" data-step="1">+1 h</button>
-    <button class="btn" data-step="6">+6 h</button>
-    <input type="range" id="slider" min="-1" max="160" step="1" value="-1" aria-label="Storm hour">
-    <span class="small muted" id="slider-l"></span>
-    <button class="btn danger" id="reset">Reset demo</button>
+    <div class="top">
+      <div><div class="small muted">Storm clock</div><div class="now" id="now">—</div></div>
+      <div class="group"><button class="btn" data-to="-1">Night before</button><button class="btn" data-to="0">Storm hits</button></div>
+      <div class="group"><button class="btn" data-step="-1">−1 h</button><button class="btn" data-step="1">+1 h</button><button class="btn" data-step="6">+6 h</button></div>
+      <div class="spacer"></div>
+      <button class="btn danger" id="reset">Reset demo</button>
+    </div>
+    <div class="slide"><input type="range" id="slider" min="-1" max="160" step="1" value="-1" aria-label="Storm hour"><span class="small muted" id="slider-l" style="min-width:150px;text-align:right"></span></div>
   </section>
 
   <section class="kpis" aria-label="System status">
@@ -78,20 +112,22 @@ textarea.field { width: 100%; resize: vertical; min-height: 60px; }
 
   <div class="grid">
     <section class="card">
-      <div class="head"><h2>Circuits</h2><div class="spacer"></div><input class="field" id="filter" placeholder="Filter…" style="width:120px" aria-label="Filter circuits"></div>
-      <div class="scroll"><table class="data" id="circuits"><thead><tr><th>Circuit</th><th class="num">Out</th><th></th><th class="num">Open</th><th class="num">Crews</th><th>Confirmed</th></tr></thead><tbody></tbody></table></div>
+      <div class="head"><h2>Circuits</h2><div class="spacer"></div><input class="field" id="filter" placeholder="Find a circuit" style="width:150px" aria-label="Find a circuit"></div>
+      <div class="scroll"><table class="data" id="circuits"><thead><tr><th>Circuit</th><th>Customers out</th><th class="num">Repairs</th><th class="num">Crews</th></tr></thead><tbody></tbody></table></div>
     </section>
 
     <section class="card detail" id="detail" aria-live="polite"><p class="empty">Pick a circuit to see its repairs and make changes.</p></section>
 
-    <div class="stack">
+    <div class="side">
+      <section class="card"><div class="head"><h2>Customer accounts</h2><span class="small muted">what each customer sees right now</span></div><div class="accts" id="accts"></div></section>
       <section class="card"><div class="head"><h2>Needs a person</h2><span class="pill bad" id="esc-n">0</span></div><div class="queue" id="queue"></div></section>
       <section class="card">
-        <h2>Notice to all customers</h2>
+        <div class="head"><h2>Announcement to all customers</h2></div>
+        <p class="small muted" style="margin:0 0 8px">Shows as a banner at the top of every customer's page.</p>
         <textarea class="field" id="sys-notice" maxlength="280" placeholder="e.g. Warming center open at the Main St library until 10pm"></textarea>
-        <div class="row" style="margin-top:8px"><label class="small"><input type="checkbox" id="sys-warn"> Mark as important</label><div class="spacer"></div><button class="btn primary" id="sys-post">Post</button></div>
+        <div class="row" style="margin-top:12px"><label class="small"><input type="checkbox" id="sys-warn"> Mark as important</label><div class="spacer"></div><button class="btn primary" id="sys-post">Post announcement</button></div>
       </section>
-      <section class="card"><h2>Activity</h2><div class="log" id="log"></div></section>
+      <section class="card"><div class="head"><h2>Activity</h2></div><div class="log" id="log"></div></section>
     </div>
   </div>
 </main>
@@ -112,9 +148,9 @@ function toast(t) { const el = $("toast"); el.textContent = t; el.classList.add(
 let S = { clock: null, overview: null, sel: null, detail: null, busy: false };
 
 async function loadAll() {
-  const [ov, q, log] = await Promise.all([api("/api/ops/overview"), api("/api/ops/escalations"), api("/api/ops/actions")]);
+  const [ov, q, log, accts] = await Promise.all([api("/api/ops/overview"), api("/api/ops/escalations"), api("/api/ops/actions"), api("/api/ops/accounts")]);
   S.overview = ov; S.clock = ov.clock;
-  renderClock(); renderKpis(ov); renderCircuits(); renderQueue(q); renderLog(log);
+  renderClock(); renderKpis(ov); renderCircuits(); renderQueue(q); renderLog(log); renderAccounts(accts);
   if (S.sel) await loadDetail(S.sel);
 }
 async function loadAccuracy() {
@@ -166,13 +202,11 @@ function renderCircuits() {
   const max = Math.max(1, ...rows.map(r => r.customers_out));
   $("circuits").querySelector("tbody").innerHTML = rows.length ? rows.map(r => `
     <tr data-c="${esc(r.circuit_id)}" class="${r.circuit_id === S.sel ? "sel" : ""}">
-      <td><b>${esc(r.circuit_id)}</b><div class="tag">${esc(r.substation_id || "")}</div></td>
-      <td class="num">${fmt(r.customers_out)}</td>
-      <td><div class="bar"><i style="width:${(100 * r.customers_out / max).toFixed(0)}%"></i></div></td>
+      <td><b>${esc(r.circuit_id)}</b>${r.confirmed_etr_h != null ? ' <span class="ok-mark" title="Restoration time confirmed">✓</span>' : ""}</td>
+      <td><span style="font-variant-numeric:tabular-nums;display:inline-block;min-width:48px;text-align:right">${fmt(r.customers_out)}</span><span class="bar"><i style="width:${(100 * r.customers_out / max).toFixed(0)}%"></i></span></td>
       <td class="num">${r.open_repairs}</td>
-      <td class="num">${r.crews ?? "–"}${r.crews_set_by_ops ? " ✎" : ""}</td>
-      <td>${r.confirmed_etr_h != null ? '<span class="pill good">✓</span>' : ""}</td></tr>`).join("")
-    : `<tr><td colspan="6" class="empty">${S.clock && S.clock.phase === "pre_storm" ? "No damage yet. Move the storm clock forward." : "No circuits with damage."}</td></tr>`;
+      <td class="num">${r.crews ?? "–"}${r.crews_set_by_ops ? '<span class="tag"> set</span>' : ""}</td></tr>`).join("")
+    : `<tr><td colspan="4" class="empty">${S.clock && S.clock.phase === "pre_storm" ? "No damage yet. Move the storm clock forward." : "No circuits with damage."}</td></tr>`;
 }
 $("filter").oninput = renderCircuits;
 $("circuits").onclick = e => { const tr = e.target.closest("tr[data-c]"); if (tr) { S.sel = tr.dataset.c; renderCircuits(); loadDetail(S.sel); } };
@@ -192,7 +226,7 @@ function renderDetail() {
   const d = S.detail, outage = S.clock.phase === "outage";
   const crews = d.crews ?? 1;
   let h = `<h3>${esc(d.circuit_id)}</h3>
-    <div class="facts"><span>${fmt(d.customers)} customers</span><span><b>${fmt(d.customers_out)}</b> out</span><span>${d.open_repairs} open repairs</span><span>${d.done_repairs} done</span></div>`;
+    <div class="facts"><span>${esc(d.substation_id || "")}</span><span>${fmt(d.customers)} customers</span><span><b>${fmt(d.customers_out)}</b> out</span><span>${d.open_repairs} open repairs</span><span>${d.done_repairs} done</span></div>`;
   h += `<div class="section"><h2>Restoration</h2>`;
   if (d.confirmed_etr) h += `<p style="margin:0 0 8px"><span class="pill good">✓ Confirmed</span> Power back by <b>${esc(d.confirmed_etr)}</b> <button class="btn sm" id="etr-clear">Remove</button></p>`;
   h += d.estimate ? `<div class="est"><span class="l">Model estimate</span><span><b>${esc(d.estimate.likely)}</b> · range ${esc(d.estimate.window)}</span>
@@ -204,18 +238,20 @@ function renderDetail() {
   h += `<div class="section"><h2>Crews on this circuit</h2><div class="row">
       <div class="stepper"><button id="cr-m" aria-label="Fewer crews">−</button><span id="cr-v">${crews}</span><button id="cr-p" aria-label="More crews">+</button></div>
       <button class="btn primary" id="cr-go" ${outage ? "" : "disabled"}>Update crews</button><span class="small muted">Customers' estimates update right away.</span></div></div>`;
-  h += `<div class="section"><h2>Open repairs</h2>${d.open.length ? `<table class="data"><thead><tr><th>Damage</th><th>Where</th><th>Reported</th><th></th></tr></thead><tbody>${d.open.map(r => `
-      <tr style="cursor:default"><td>${esc(r.what)}<div class="tag">${esc(r.incident_id)} · ${esc(r.source)}</div></td><td>${esc(r.where)}<div class="tag">${esc(r.device_id)}</div></td>
-      <td>${esc(r.reported)}</td><td class="num"><button class="btn sm" data-fix="${esc(r.incident_id)}">Mark repaired</button></td></tr>`).join("")}</tbody></table>`
+  h += `<div class="section"><h2>Open repairs (${d.open.length})</h2>${d.open.length ? `<div class="repairs"><table class="data"><thead><tr><th>Damage</th><th>Where</th><th>Reported</th><th></th></tr></thead><tbody>${d.open.map(r => `
+      <tr style="cursor:default"><td>${esc(r.what.charAt(0).toUpperCase() + r.what.slice(1))}<div class="tag">${esc(r.incident_id)} · ${esc(r.source)}</div></td><td>${esc(r.where)}<div class="tag">${esc(r.device_id)}</div></td>
+      <td>${esc(r.reported)}</td><td class="num"><button class="btn sm" data-fix="${esc(r.incident_id)}">Mark repaired</button></td></tr>`).join("")}</tbody></table></div>`
     : `<p class="empty" style="margin:0">No open repairs.</p>`}</div>`;
-  if (outage) h += `<div class="section"><h2>Log damage crews found</h2><div class="row">
+  if (outage) h += `<details class="more" id="more-dm"><summary>Log damage crews found</summary><div class="body row">
       <select class="field" id="dm-type">${d.damage_types.map(t => `<option value="${t.id}">${esc(t.label)}</option>`).join("")}</select>
       <select class="field" id="dm-dev" style="max-width:260px">${d.devices.map(v => `<option value="${esc(v.device_id)}">${esc(v.label)} · ${fmt(v.customers)} customers</option>`).join("")}</select>
       <input class="field" id="dm-q" type="number" min="1" max="10" value="1" style="width:64px" aria-label="Quantity">
-      <button class="btn primary" id="dm-go">Log damage</button></div></div>`;
-  h += `<div class="section"><h2>Notice to this circuit</h2>${d.notices.filter(n => n.scope !== "everyone").map(n => `<p class="small" style="margin:0 0 6px">“${esc(n.text)}”</p>`).join("")}
-      <div class="row"><input class="field" id="cn-text" maxlength="280" placeholder="e.g. Crews are on your street now" style="flex:1"><button class="btn" id="cn-go">Post</button></div></div>`;
+      <button class="btn primary" id="dm-go">Log damage</button></div></details>`;
+  h += `<details class="more" id="more-cn"><summary>Announcement to this circuit only</summary><div class="body">${d.notices.filter(n => n.scope !== "everyone").map(n => `<p class="small" style="margin:0 0 8px">“${esc(n.text)}”</p>`).join("")}
+      <div class="row"><input class="field" id="cn-text" maxlength="280" placeholder="e.g. Crews are on your street now" style="flex:1"><button class="btn" id="cn-go">Post</button></div></div></details>`;
+  const open = new Set([...$("detail").querySelectorAll("details[open]")].map(x => x.id));
   $("detail").innerHTML = h;
+  open.forEach(id => { const x = $(id); if (x) x.open = true; });
 
   let n = crews;
   const show = () => $("cr-v").textContent = n;
@@ -242,13 +278,27 @@ async function act(kind, payload, msg, circuit = S.sel) {
 }
 $("sys-post").onclick = () => {
   const t = $("sys-notice").value.trim(); if (!t) return;
-  act("notice", { text: t, level: $("sys-warn").checked ? "warning" : "info" }, "Notice posted to all customers", null).then(() => { $("sys-notice").value = ""; });
+  act("notice", { text: t, level: $("sys-warn").checked ? "warning" : "info" }, "Announcement posted to all customers", null).then(() => { $("sys-notice").value = ""; });
 };
+
+// ---------- customer accounts ----------
+function renderAccounts(list) {
+  const st = a => a.state === "out" ? ["out", `Out since ${a.outage_since}`] : a.state === "restored" ? ["on", `Restored ${a.restored_at}`]
+    : a.state === "storm_coming" ? ["storm", "Storm coming"] : ["on", "Power on"];
+  $("accts").innerHTML = list.map(a => {
+    const [c, label] = st(a);
+    const told = a.state === "out" ? `Told: back ${a.confirmed ? "by " + a.told + " (confirmed)" : "around " + a.told}`
+      : a.state === "storm_coming" && a.risk ? `Told: ${a.risk} outage risk` : a.state === "on" ? "Their line has no damage in this storm" : "";
+    return `<div class="acct-row"><div><span class="n">${esc(a.name)}</span> <span class="tag">${esc(a.account)} · ${esc(a.circuit_id)}${a.needs.length ? " · " + esc(a.needs.map(n => ({ insulin_fridge: "insulin", sump_pump: "sump pump" }[n] || n)).join(", ")) : ""}</span></div>
+      <a class="btn sm" href="/?account=${encodeURIComponent(a.premise_id)}" target="oc-customer">Open their page ↗</a>
+      <div class="told"><span class="st ${c}">${esc(label)}</span>${told ? " · " + esc(told) : ""}</div></div>`;
+  }).join("") || `<p class="empty" style="margin:0">No accounts.</p>`;
+}
 
 // ---------- queue + log ----------
 function renderQueue(q) {
   $("esc-n").textContent = q.length;
-  $("queue").innerHTML = q.length ? q.map(x => `<div class="q"><div class="t"><span class="pill ${x.kind === "Safety report" ? "bad" : "warn"}">${esc(x.kind)}</span>${esc(x.who)}${x.account ? ` <span class="tag">${esc(x.account)}</span>` : ""}${x.at ? ` <span class="tag">${esc(x.at)}</span>` : ""}</div>
+  $("queue").innerHTML = q.length ? q.map(x => `<div class="q"><div class="t"><span class="pill ${x.kind === "Safety report" ? "bad" : "warn"}">${esc(x.kind)}</span>${esc(x.who)}${x.account ? ` <span class="tag">${esc(x.account)}</span>` : ""}${x.at ? ` <span class="tag">at ${esc(x.at)}</span>` : ""}</div>
       <div class="w">${esc(x.why)}${x.circuit_id ? ` · ${esc(x.circuit_id)}` : ""}</div></div>`).join("")
     : `<p class="empty" style="margin:0">Nobody waiting.</p>`;
 }

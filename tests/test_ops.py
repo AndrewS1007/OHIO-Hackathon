@@ -137,3 +137,17 @@ def test_pages_are_served():
     assert "Outage Center" in client.get("/").text
     assert "Storm Operations" in client.get("/ops").text
     assert client.get("/static/app.css").status_code == 200
+
+
+def test_console_lists_accounts_with_live_status():
+    accts = client.get("/api/ops/accounts").json()
+    maria = next(a for a in accts if a["name"] == MARIA["name"])
+    assert maria["state"] == "out" and maria["told"] and maria["circuit_id"] == CID
+    act("etr_confirmed", {"at_h": OUT_H + 4})
+    maria = next(a for a in client.get("/api/ops/accounts").json() if a["name"] == MARIA["name"])
+    assert maria["confirmed"]
+
+
+def test_pages_are_never_cached():
+    for path in ("/", "/ops", "/static/app.css"):
+        assert client.get(path).headers["cache-control"] == "no-store"

@@ -112,3 +112,24 @@ The `Modelfile` holds the chatbot's rules (same as `SYSTEM` in `concierge/agent.
 - The numbers come from made-up data, so the risk model and honesty score demonstrate the method, not real accuracy.
 - Calibration fixes coverage (67% → 81% on held-out storms) but doubles range width (~12 h → ~22 h). Late in long outages P90 gets very wide; calibrating per "hours into the outage" would tighten it.
 - Danger keywords are regex: good for a demo, but should be checked against real customer texts.
+
+## Real SMS through an Android phone
+
+The phone's own number becomes the concierge's number, using the free [SMS Gateway for Android](https://sms-gate.app) app in **cloud mode**. The phone needs signal, not shared Wi-Fi.
+
+1. Install the app, turn on **Cloud server**, and tap **Online**. Note the username and password on the Home tab.
+2. Expose the server (keep this running; a quick tunnel's URL changes on restart):
+   ```bash
+   cloudflared tunnel --url http://localhost:8000
+   ```
+3. Register the webhook once (replace the credentials and tunnel URL):
+   ```bash
+   curl -X POST -u USER:PASS -H "Content-Type: application/json" -d '{"url": "https://<tunnel-url>/sms/gateway", "event": "sms:received"}' https://api.sms-gate.app/3rdparty/v1/webhooks
+   ```
+4. Start the server with the credentials. `SMSGATE_SIGNING_KEY` (app: Settings → Webhooks → Signing Key) makes the server reject webhooks that aren't from your phone:
+   ```bash
+   SMSGATE_USER=USER SMSGATE_PASSWORD=PASS SMSGATE_SIGNING_KEY=KEY .venv/bin/uvicorn concierge.api:app --port 8000
+   ```
+5. From another phone, text `DEMO` to the Android phone's number, then `WHEN`, `WHY`, `PLAN`. Proactive alerts from `/api/demo/prestorm_alerts` and `/api/demo/advance` are now texted for real.
+
+Replies are sent in the background, so slow AI answers are fine (the app only waits 30 s for the webhook). The sample customers' 555 numbers are never texted. Local-server mode works too: set `SMSGATE_URL=http://<phone-ip>:8080`, but the app then needs HTTPS for webhooks to anything other than the phone itself, so cloud mode is simpler.

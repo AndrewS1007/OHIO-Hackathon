@@ -52,7 +52,10 @@ def outage_actions(p90_hours: float | None, needs: list[dict]) -> list[str]:
 
 def power_budget(needs: list[dict], p10: float, p90: float) -> list[dict]:
     """Line up what the customer depends on against the restoration range (hours from outage start)."""
-    items = [{"hour": FRIDGE_SAFE_HOURS, "what": "Fridge stops being safe for food and insulin. Move insulin to the cooler.",
+    insulin = any(n["need"] == "insulin_fridge" for n in needs)  # only mention insulin if they told us
+    fridge = ("Fridge stops keeping insulin and food safe. Move insulin to a cooler with ice packs." if insulin
+              else "Fridge stops keeping food safe. Keep it closed, and move milk and meat to a cooler if you can.")
+    items = [{"hour": FRIDGE_SAFE_HOURS, "what": fridge,
               "risk": "likely" if p10 > FRIDGE_SAFE_HOURS else "possible" if p90 > FRIDGE_SAFE_HOURS else "unlikely"}]
     for n in needs:
         bh = n.get("battery_hours")

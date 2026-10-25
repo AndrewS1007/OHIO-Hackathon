@@ -4,21 +4,24 @@ Customer site:      /            (+ /api/accounts, /api/me/{premise_id}, /api/ch
 Operations console: /ops         (+ /api/ops/...: overview, circuits, fixes, clock)
 Engines:            /api/premises/{id}/..., /api/replay/..., /api/backtest
 Twilio webhooks:    POST /sms/twilio (Messaging), POST /voice/twilio (Voice)
+Android gateway:    POST /sms/gateway (SMS Gateway for Android, event sms:received)
 """
 from __future__ import annotations
 
 import base64
 import hashlib
 import hmac
+import json
 import os
+import time
 from xml.sax.saxutils import escape
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import agent, backtest, ops, portal, replay, rules, safety, service, sms, store, views
+from . import agent, backtest, ops, portal, replay, rules, safety, service, sms, store, views, webchat
 from .config import ROOT
 from .data import get_dataset
 from .factcard import recent_audit
@@ -26,6 +29,15 @@ from .risk import predict
 
 app = FastAPI(title="Built for the Dark: AI Outage Concierge")
 app.mount("/static", StaticFiles(directory=ROOT / "web"), name="static")
+
+
+@app.middleware("http")
+async def no_stale_pages(request: Request, call_next):
+    """Pages and their CSS change during the hackathon: never let a browser show an old copy."""
+    resp = await call_next(request)
+    if request.url.path in ("/", "/ops") or request.url.path.startswith("/static/"):
+        resp.headers["Cache-Control"] = "no-store"
+    return resp
 
 
 @app.on_event("startup")
@@ -97,6 +109,11 @@ def ops_circuit(circuit_id: str):
     if circuit_id not in set(get_dataset().circuits.circuit_id):
         raise HTTPException(404, "Unknown circuit")
     return portal.circuit_detail(circuit_id)
+
+
+@app.get("/api/ops/accounts")
+def ops_accounts():
+    return portal.account_statuses()
 
 
 @app.get("/api/ops/escalations")
@@ -267,13 +284,13 @@ def chat_status():
 @app.post("/api/chat")
 def chat(m: Chat):
     c = _customer(m.premise_id)
-    text = m.message.strip()[:600]
+    text = webchat.question_for(m.message.strip()[:600])  # a typed SMS keyword ("WHY") means its question
     gate = safety.check(text)
     if gate.kind != "ok":
         audit_who = "web-" + m.conversation_id[:8]
         from .factcard import audit
         audit("danger_escalation" if gate.kind == "danger" else "guardrail", audit_who, {"category": gate.category})
-        return {"text": gate.reply, "source": "safety_gate", "gate": gate.kind, "category": gate.category, "steps": []}
+        return {"text": webchat.for_web(gate.reply), "source": "safety_gate", "gate": gate.kind, "category": gate.category, "steps": []}
     what_if = {k: v for k, v in {"crews": m.crews, "extra_poles": m.extra_poles,
                                  "access": m.access if m.access != 1.0 else None}.items() if v}
     if m.t is None:
@@ -281,7 +298,14 @@ def chat(m: Chat):
     else:
         world = service.World("pre_storm" if m.t < 0 else "outage", max(m.t, 0.0), what_if)
     ctx = agent.ChatContext(c, world, channel="web", who="web-" + m.conversation_id[:8])
-    return agent.answer("web-" + m.conversation_id + "-" + m.premise_id, text, ctx)
+    if webchat.wants_person(text):
+        # Never leave this to the model: asking for a person always reaches the staff queue.
+        agent.run_tool("request_human", {"reason": f"Asked in web chat: {text[:120]}"}, ctx)
+        return {"text": "Okay. I've asked someone from our storm team to call the number on your account. "
+                        "If anyone is in danger right now, call 911.", "source": "human_request",
+                "steps": [{"tool": "request_human", "label": agent.TOOL_LABELS["request_human"]}]}
+    r = agent.answer("web-" + m.conversation_id + "-" + m.premise_id, text, ctx)
+    return {**r, "text": webchat.for_web(r["text"])}
 
 
 # ---------- demo controls (storm clock + what-ifs) ----------
@@ -361,6 +385,41 @@ async def sms_twilio(request: Request):
     r = sms.handle(form.get("From", ""), form.get("Body", ""))
     xml = f'<?xml version="1.0" encoding="UTF-8"?><Response><Message>{escape(r["text"])}</Message></Response>'
     return Response(xml, media_type="application/xml")
+
+
+_gateway_seen: set[str] = set()  # message ids already handled (the app retries on slow replies)
+
+
+def _gateway_ok(raw: bytes, request: Request) -> bool:
+    """Check X-Signature (HMAC-SHA256 of body + X-Timestamp) when SMSGATE_SIGNING_KEY is set."""
+    key = os.environ.get("SMSGATE_SIGNING_KEY")
+    if not key:
+        return True
+    ts = request.headers.get("X-Timestamp", "")
+    if not ts.isdigit() or abs(time.time() - int(ts)) > 300:
+        return False
+    expected = hmac.new(key.encode(), raw + ts.encode(), hashlib.sha256).hexdigest()
+    return hmac.compare_digest(expected, request.headers.get("X-Signature", "").lower())
+
+
+@app.post("/sms/gateway")
+async def sms_gateway(request: Request, background: BackgroundTasks):
+    """Webhook from SMS Gateway for Android (event sms:received). We answer 200 right away and
+    text the reply from the background, so a slow AI answer never makes the phone retry."""
+    raw = await request.body()
+    if not _gateway_ok(raw, request):
+        raise HTTPException(403, "Bad signature")
+    event = json.loads(raw or b"{}")
+    p = event.get("payload") or {}
+    msg_id, sender, text = p.get("messageId") or event.get("id"), p.get("sender"), p.get("message")
+    if event.get("event") != "sms:received" or not sender or text is None:
+        return {"ok": True, "ignored": True}
+    if msg_id in _gateway_seen:
+        return {"ok": True, "duplicate": True}
+    if msg_id:
+        _gateway_seen.add(msg_id)
+    background.add_task(sms.handle, sender, text, True)
+    return {"ok": True}
 
 
 @app.post("/voice/twilio")

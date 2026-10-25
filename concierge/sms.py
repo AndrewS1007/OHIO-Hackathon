@@ -10,7 +10,7 @@ from __future__ import annotations
 import copy
 import re
 
-from . import agent, safety, store
+from . import agent, outbound, safety, store
 from .data import get_dataset
 from .factcard import audit
 from .narrate import sms_segments
@@ -42,11 +42,15 @@ def _link(phone: str, body: str) -> Session | None:
     return s
 
 
-def handle(phone: str, body: str) -> dict:
-    """Entry point for every inbound text (Twilio and the simulator): records the thread and saves state."""
+def handle(phone: str, body: str, deliver: bool = False) -> dict:
+    """Entry point for every inbound text (Twilio, the Android gateway and the simulator): records
+    the thread and saves state. deliver=True also sends the reply as a text (the gateway has no
+    reply-in-the-response like Twilio's TwiML)."""
     store.log_message(phone, "in", body)
     r = _handle(phone, body)
-    store.log_message(phone, "out", r["text"], r.get("kind"))
+    if deliver:
+        r["delivery"] = outbound.send(phone, r["text"])
+    store.log_message(phone, "out", r["text"], r.get("kind"), r.get("delivery"))
     persist(phone)
     return r
 

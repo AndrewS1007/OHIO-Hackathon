@@ -6,92 +6,122 @@
 <title>Outage Center</title>
 <link rel="stylesheet" href="/static/app.css">
 <style>
-.wrap { max-width: 1320px; margin: 0 auto; padding: 20px 24px 40px; }
-.notices { display: grid; gap: 8px; margin-bottom: 16px; }
+body { background: var(--page); }
+.card { border-radius: 8px; box-shadow: none; }
+.wrap { max-width: 1280px; margin: 0 auto; padding: 24px 24px 48px; }
+.layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(360px, 44%); gap: 24px; align-items: start; }
+.col { display: grid; gap: 20px; }
+h2 { font-size: 17px; font-weight: 650; }
+
+/* staff announcements: big and impossible to miss */
+.notices { display: grid; gap: 12px; margin-bottom: 24px; }
 .notices:empty { display: none; }
-.layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(380px, 46%); gap: 20px; align-items: start; }
-.col { display: grid; gap: 16px; }
+.announce { display: grid; grid-template-columns: auto 1fr; gap: 4px 16px; padding: 18px 22px; border-radius: 8px;
+  background: var(--brand-soft); border-left: 6px solid var(--brand); }
+.announce.warning { background: var(--warn-soft); border-left-color: var(--warn); }
+.announce svg { grid-row: span 2; width: 28px; height: 28px; margin-top: 2px; color: var(--brand); }
+.announce.warning svg { color: var(--warn); }
+.announce .a-h { font-size: 14px; font-weight: 700; color: var(--ink-2); }
+.announce .a-t { font-size: 21px; font-weight: 650; line-height: 1.35; }
 
-/* status hero */
-.hero { padding: 24px 26px; }
-.hero .state { margin-bottom: 14px; }
-.hero .big-label { color: var(--muted); font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
-.hero .big { font-size: 40px; font-weight: 750; letter-spacing: -.02em; line-height: 1.1; margin: 4px 0 6px; }
-.hero .sub { font-size: 16px; color: var(--ink-2); }
-.hero .confirmed { display: flex; gap: 10px; align-items: center; background: var(--good-soft); color: var(--good);
-  border-radius: 12px; padding: 10px 14px; margin-top: 14px; font-weight: 600; }
-.hero .confirmed .tick { width: 22px; height: 22px; border-radius: 50%; background: var(--good); color: var(--surface);
-  display: grid; place-items: center; font-size: 13px; flex: none; }
-.why { margin: 16px 0 0; padding: 14px 0 0; border-top: 1px solid var(--line); }
-.why ul, .todo ul { margin: 6px 0 0; padding: 0; list-style: none; display: grid; gap: 6px; }
-.why li { padding-left: 16px; position: relative; color: var(--ink-2); }
-.why li::before { content: ""; position: absolute; left: 2px; top: .62em; width: 6px; height: 6px; border-radius: 50%; background: var(--muted); }
-.meta { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 14px; font-size: 13px; color: var(--muted); }
+/* status */
+.status { border-left: 6px solid var(--muted); padding: 24px 28px; }
+.status.out { border-left-color: var(--bad); }
+.status.ok { border-left-color: var(--good); }
+.status.storm { border-left-color: var(--warn); }
+.status .state { font-size: 15px; font-weight: 700; margin-bottom: 14px; }
+.status.out .state { color: var(--bad); }
+.status.ok .state { color: var(--good); }
+.status.storm .state { color: var(--warn); }
+.status .label { color: var(--ink-2); font-size: 15px; }
+.status .big { font-size: 38px; font-weight: 700; letter-spacing: -.01em; line-height: 1.15; margin: 2px 0 6px; }
+.status .sub { font-size: 16px; color: var(--ink-2); margin: 0; }
+.status .confirmed { margin-top: 12px; color: var(--good); font-weight: 650; font-size: 15px; }
+.why { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); }
+.why h2 { font-size: 15px; }
+.why ul { margin: 8px 0 0; padding-left: 20px; display: grid; gap: 4px; color: var(--ink-2); }
+.meta { margin-top: 16px; font-size: 13px; color: var(--muted); }
 
-.todo li { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; }
-.todo li .box { width: 18px; height: 18px; flex: none; border: 2px solid var(--line); border-radius: 5px; margin-top: 2px; }
+.todo ul { margin: 10px 0 0; padding: 0; list-style: none; display: grid; gap: 10px; }
+.todo li { display: flex; gap: 12px; align-items: flex-start; cursor: pointer; }
+.todo li .box { width: 18px; height: 18px; flex: none; border: 2px solid var(--muted); border-radius: 3px; margin-top: 2px; }
 .todo li.done .box { background: var(--good); border-color: var(--good); }
 .todo li.done span:last-child { color: var(--muted); text-decoration: line-through; }
 
-.timeline { display: grid; gap: 8px; margin-top: 8px; }
-.tl-row { display: grid; grid-template-columns: 64px 1fr auto; gap: 10px; align-items: center; }
+.timeline { display: grid; gap: 0; margin-top: 10px; }
+.tl-row { display: grid; grid-template-columns: 76px 1fr auto; gap: 12px; align-items: baseline; padding: 10px 0; border-top: 1px solid var(--line); }
+.tl-row:first-child { border-top: 0; }
 .tl-row .h { font-weight: 650; font-variant-numeric: tabular-nums; }
-.two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-.safety { font-size: 13px; color: var(--ink-2); display: flex; gap: 8px; align-items: center; }
+.tl-row .r { font-size: 13px; font-weight: 600; }
+.tl-row .r.likely { color: var(--bad); }
+.tl-row .r.possible { color: var(--warn); }
+.tl-row .r.unlikely { color: var(--good); }
+.alerts-on { font-weight: 650; }
+.safety { font-size: 14px; color: var(--ink-2); padding: 14px 18px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+.safety b { color: var(--bad); }
 
-/* chat */
-.chat { position: sticky; top: 76px; display: flex; flex-direction: column; height: calc(100vh - 100px); min-height: 560px; padding: 0; overflow: hidden; }
-.chat-h { display: flex; align-items: center; gap: 12px; padding: 16px 20px; border-bottom: 1px solid var(--line); }
-.chat-h .av { width: 38px; height: 38px; border-radius: 50%; background: var(--brand); color: var(--brand-ink); display: grid; place-items: center; font-size: 18px; flex: none; }
-.chat-h .t { font-weight: 700; font-size: 16px; }
-.msgs { flex: 1; overflow-y: auto; padding: 18px 20px; display: flex; flex-direction: column; gap: 12px; background: var(--surface-2); }
-.msg { max-width: 82%; padding: 10px 14px; border-radius: 16px; white-space: pre-wrap; overflow-wrap: anywhere; }
-.msg.bot { background: var(--surface); border: 1px solid var(--line); border-bottom-left-radius: 5px; align-self: flex-start; }
-.msg.me { background: var(--brand); color: var(--brand-ink); border-bottom-right-radius: 5px; align-self: flex-end; }
-.msg.alert { background: var(--bad-soft); color: var(--bad); font-weight: 600; align-self: flex-start; border-bottom-left-radius: 5px; }
-.msg .how { margin-top: 6px; font-size: 12px; color: var(--muted); white-space: normal; font-weight: 400; }
-.typing { align-self: flex-start; color: var(--muted); font-size: 13px; padding: 4px 6px; }
-.chips { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 20px 0; }
-.chip { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 6px 12px; font-size: 13px; cursor: pointer; }
+/* chat: a standard support chat panel */
+.chat { position: sticky; top: 80px; display: flex; flex-direction: column; height: calc(100vh - 104px); min-height: 560px; padding: 0; overflow: hidden; }
+.chat-h { padding: 16px 20px; background: var(--brand); color: var(--brand-ink); }
+.chat-h .t { font-weight: 700; font-size: 17px; }
+.chat-h .s { font-size: 13px; opacity: .85; }
+.msgs { flex: 1; overflow-y: auto; padding: 18px 20px; display: flex; flex-direction: column; gap: 10px; }
+.msg { max-width: 84%; padding: 10px 14px; border-radius: 8px; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.45; }
+.msg.bot { background: var(--surface-2); align-self: flex-start; }
+.msg.me { background: var(--brand); color: var(--brand-ink); align-self: flex-end; }
+.msg.alert { background: var(--bad-soft); color: var(--bad); font-weight: 600; align-self: flex-start; }
+.typing { align-self: flex-start; color: var(--muted); font-size: 13px; padding: 2px 4px; }
+.common { padding: 12px 20px 0; border-top: 1px solid var(--line); }
+.common .l { font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { border: 1px solid var(--line); background: var(--surface); border-radius: 6px; padding: 5px 10px; font-size: 13px; cursor: pointer; color: var(--ink-2); }
 .chip:hover { border-color: var(--brand); color: var(--brand); }
-.ask { display: flex; gap: 10px; padding: 14px 20px 18px; }
-.ask input { flex: 1; padding: 12px 14px; border-radius: 12px; }
-.ask button { padding: 0 18px; border-radius: 12px; }
+.ask { display: flex; gap: 8px; padding: 12px 20px 18px; }
+.ask input { flex: 1; padding: 11px 12px; border-radius: 6px; }
+.ask button { padding: 0 18px; border-radius: 6px; }
 
-/* sign-in */
-.signin { max-width: 460px; margin: 10vh auto; }
+/* header and sign-in */
+.topbar { padding: 14px 24px; }
+.wordmark { display: flex; align-items: center; gap: 10px; font-weight: 750; font-size: 18px; letter-spacing: -.01em; }
+.wordmark svg { width: 26px; height: 26px; color: var(--brand); }
+.signin { max-width: 440px; margin: 10vh auto; padding: 28px; }
 .signin h1 { font-size: 24px; margin-bottom: 6px; }
-.acct { display: flex; justify-content: space-between; align-items: center; width: 100%; text-align: left; padding: 14px 16px; margin-top: 10px; }
+.acct { display: flex; justify-content: space-between; align-items: center; width: 100%; text-align: left; padding: 14px 16px; margin-top: 10px; border-radius: 6px; }
 .acct b { display: block; }
 .menu { position: relative; }
-.menu-list { position: absolute; right: 0; top: calc(100% + 6px); background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+.menu-list { position: absolute; right: 0; top: calc(100% + 6px); background: var(--surface); border: 1px solid var(--line); border-radius: 8px;
   box-shadow: var(--shadow); padding: 6px; min-width: 220px; display: none; z-index: 20; }
 .menu-list.on { display: block; }
-.menu-list button { display: block; width: 100%; text-align: left; border: 0; background: none; padding: 8px 10px; border-radius: 8px; cursor: pointer; }
+.menu-list button { display: block; width: 100%; text-align: left; border: 0; background: none; padding: 8px 10px; border-radius: 6px; cursor: pointer; }
 .menu-list button:hover { background: var(--surface-2); }
-.updated { font-size: 12px; color: var(--muted); }
-.fab { display: none; position: fixed; right: 16px; bottom: 16px; z-index: 30; border-radius: 999px; padding: 12px 18px; box-shadow: var(--shadow); }
+.btn { border-radius: 6px; }
+.updated { font-size: 13px; color: var(--ink-2); }
 .skel { color: var(--muted); }
+.fab { display: none; position: fixed; right: 16px; bottom: 16px; z-index: 30; padding: 12px 18px; box-shadow: var(--shadow); }
 
 @media (max-width: 980px) {
   .layout { grid-template-columns: 1fr; }
   .chat { position: static; height: 620px; scroll-margin-top: 70px; }
   .fab { display: block; }
   .fab[hidden] { display: none; }
-  .hero .big { font-size: 32px; }
+  .status .big { font-size: 32px; }
 }
 @media (max-width: 560px) {
-  .wrap { padding: 14px 16px 30px; }
+  .wrap { padding: 16px 16px 32px; }
   .topbar { padding: 10px 16px; }
-  .two { grid-template-columns: 1fr; }
   .msg { max-width: 92%; }
   .updated { display: none; }
+  .announce { padding: 14px 16px; }
+  .announce .a-t { font-size: 18px; }
 }
 </style>
 </head>
 <body>
 <header class="topbar">
-  <div class="brand"><span class="mark" aria-hidden="true">⚡</span>Outage Center</div>
+  <div class="wordmark">
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z"/></svg>
+    Outage Center
+  </div>
   <div class="spacer"></div>
   <span class="updated" id="updated"></span>
   <div class="menu" id="acct-menu" hidden>
@@ -103,39 +133,38 @@
 <main class="wrap">
   <section class="card signin" id="signin" hidden>
     <h1>Sign in</h1>
-    <p class="muted" style="margin:0">See your outage status and estimated restoration time, and chat with our outage assistant.</p>
+    <p class="muted" style="margin:0">Check your outage status and estimated restoration time.</p>
     <div id="acct-buttons"></div>
     <p class="small muted" style="margin:14px 0 0">Demo accounts</p>
   </section>
 
   <div id="home" hidden>
-    <div class="notices" id="notices"></div>
+    <div class="notices" id="notices" aria-live="polite"></div>
     <div class="layout">
       <div class="col">
-        <section class="card hero" id="hero" aria-live="polite"><span class="skel">Loading your status…</span></section>
+        <section class="card status" id="status" aria-live="polite"><span class="skel">Loading your status…</span></section>
         <section class="card todo" id="todo-card"><h2>What to do now</h2><ul id="todo"></ul></section>
         <section class="card"><h2>Your plan</h2><div id="plan"></div></section>
         <section class="card"><h2>Outage alerts</h2><div id="alerts"></div></section>
-        <div class="safety"><span class="pill bad">Safety</span>See a downed line? Stay 35 feet away and call 911.</div>
+        <div class="safety"><b>Safety:</b> If you see a downed power line, stay at least 35 feet away and call 911.</div>
       </div>
 
-      <section class="card chat" id="chat" aria-label="Outage assistant">
+      <section class="card chat" id="chat" aria-label="Chat with us">
         <div class="chat-h">
-          <div class="av" aria-hidden="true">💬</div>
-          <div><div class="t">Outage Assistant</div><div class="small muted" id="chat-mode">Answers from your live outage data</div></div>
+          <div class="t">Chat with us</div>
+          <div class="s">Questions about your outage, your plan, or staying safe</div>
         </div>
         <div class="msgs" id="msgs" aria-live="polite"></div>
-        <div class="chips" id="chips"></div>
+        <div class="common"><div class="l">Common questions</div><div class="chips" id="chips"></div></div>
         <form class="ask" id="ask">
-          <input class="field" id="ask-in" autocomplete="off" placeholder="Ask about your power, your plan, or safety…" aria-label="Message the outage assistant">
+          <input class="field" id="ask-in" autocomplete="off" placeholder="Type your question" aria-label="Type your question">
           <button class="btn primary" type="submit" id="ask-go">Send</button>
         </form>
       </section>
     </div>
   </div>
 </main>
-<button class="btn primary fab" id="fab" hidden>💬 Ask the assistant</button>
-<div class="toast" id="toast"></div>
+<button class="btn primary fab" id="fab" hidden>Chat with us</button>
 
 <script>
 const $ = id => document.getElementById(id);
@@ -148,14 +177,16 @@ const store = {
 };
 const NEED_WORDS = { CPAP: "CPAP", insulin_fridge: "insulin", oxygen: "oxygen concentrator", sump_pump: "sump pump" };
 const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+const ICON_INFO = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 11v6M12 7h.01" stroke-linecap="round"/></svg>`;
+const ICON_WARN = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3 2 20h20L12 3z" stroke-linejoin="round"/><path d="M12 10v4M12 17h.01" stroke-linecap="round"/></svg>`;
 
-let accounts = [], me = null, last = null, lastJson = "", convo = null, done = new Set(), greeted = false;
+let accounts = [], me = null, last = null, lastJson = "", convo = null, done = new Set(), greeted = false, chatVisible = false;
 
 // ---------- accounts ----------
 async function boot() {
   accounts = await api("/api/accounts");
   $("acct-buttons").innerHTML = accounts.map((a, i) =>
-    `<button class="btn acct" data-i="${i}"><span><b>${esc(a.name)}</b><span class="small muted">Account ${esc(a.account)}</span></span><span aria-hidden="true">→</span></button>`).join("");
+    `<button class="btn acct" data-i="${i}"><span><b>${esc(a.name)}</b><span class="small muted">Account ${esc(a.account)}</span></span><span aria-hidden="true">›</span></button>`).join("");
   $("acct-buttons").onclick = e => { const b = e.target.closest("[data-i]"); if (b) signIn(accounts[+b.dataset.i]); };
   $("acct-list").innerHTML = accounts.map((a, i) => `<button data-i="${i}" role="menuitem">${esc(a.name)} <span class="muted small">${esc(a.account)}</span></button>`).join("")
     + `<button data-out="1" role="menuitem">Sign out</button>`;
@@ -165,9 +196,10 @@ async function boot() {
   };
   $("acct-btn").onclick = () => toggleMenu();
   document.addEventListener("click", e => { if (!e.target.closest("#acct-menu")) toggleMenu(false); });
-  const saved = accounts.find(a => a.premise_id === store.get("oc-account"));
+  const asked = new URLSearchParams(location.search).get("account");  // "Open their page" from the operations console
+  const saved = accounts.find(a => a.premise_id === (asked || store.get("oc-account")));
+  if (asked) history.replaceState(null, "", "/");
   saved ? signIn(saved) : signOut();
-  chatMode();
   setInterval(refresh, 4000);
 }
 function toggleMenu(on) {
@@ -177,7 +209,7 @@ function toggleMenu(on) {
 function signOut() {
   me = null; store.del("oc-account");
   $("signin").hidden = false; $("home").hidden = true; $("acct-menu").hidden = true; $("updated").textContent = "";
-  if (typeof updateFab === "function") updateFab();
+  updateFab();
 }
 function signIn(a) {
   me = a; store.set("oc-account", a.premise_id); lastJson = ""; greeted = false;
@@ -185,8 +217,7 @@ function signIn(a) {
   convo = Math.random().toString(36).slice(2);
   $("signin").hidden = true; $("home").hidden = false; $("acct-menu").hidden = false;
   $("acct-btn").innerHTML = `${esc(a.name)} <span class="muted">${esc(a.account)}</span> ▾`;
-  $("msgs").innerHTML = ""; renderChips();
-  if (typeof updateFab === "function") updateFab();
+  $("msgs").innerHTML = ""; renderChips(); updateFab();
   refresh();
 }
 
@@ -200,52 +231,60 @@ async function refresh() {
     const j = JSON.stringify(s);
     if (j !== lastJson) { lastJson = j; last = s; render(s); }
     if (!greeted) { greeted = true; greet(); }
-    $("updated").textContent = `Updated ${new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`;
+    $("updated").textContent = `Status as of ${s.now}`;
   } catch { $("updated").textContent = "Reconnecting…"; }
 }
 
 function render(s) {
-  $("notices").innerHTML = s.notices.map(n =>
-    `<div class="notice ${n.level === "warning" ? "warning" : "info"}"><b>${n.level === "warning" ? "Important" : "Update"}</b><span>${esc(n.text)}</span></div>`).join("");
-  const e = s.estimate;
-  let h = "";
+  $("notices").innerHTML = s.notices.map(n => `
+    <div class="announce ${n.level === "warning" ? "warning" : ""}" role="${n.level === "warning" ? "alert" : "status"}">
+      ${n.level === "warning" ? ICON_WARN : ICON_INFO}
+      <div class="a-h">${n.level === "warning" ? "Important update" : "Update"} from our storm team · ${esc(n.posted)}</div>
+      <div class="a-t">${esc(n.text)}</div>
+    </div>`).join("");
+
+  const e = s.estimate, el = $("status");
+  let h = "", cls = "";
   if (s.state === "out") {
-    h += `<div class="state"><span class="pill bad"><span class="dot"></span>Power out since ${esc(s.outage_since)}</span></div>`;
+    cls = "out";
+    h += `<div class="state">Your power is out (since ${esc(s.outage_since)})</div>`;
     if (e && e.confirmed_etr) {
-      h += `<div class="big-label">Power back by</div><div class="big">${esc(e.confirmed_etr)}</div>
-            <div class="confirmed"><span class="tick">✓</span>Confirmed by our crews</div>
-            <p class="sub" style="margin:12px 0 0">Our model's range: ${esc(e.window.replace("-", " to "))}</p>`;
+      h += `<div class="label">Power will be back by</div><div class="big">${esc(e.confirmed_etr)}</div>
+            <div class="confirmed">Confirmed by our crews</div>
+            <p class="sub" style="margin-top:8px">Earlier estimate: ${esc(e.window.replace("-", " to "))}</p>`;
     } else if (e) {
-      h += `<div class="big-label">Estimated restoration</div><div class="big">${esc(e.likely)}</div>
-            <div class="sub">Likely between <b>${esc(e.window.replace("-", " and "))}</b> · ${esc(e.confidence)} confidence</div>`;
+      h += `<div class="label">Estimated restoration</div><div class="big">${esc(e.likely)}</div>
+            <p class="sub">Most likely between ${esc(e.window.replace("-", " and "))}. This is an estimate and may change.</p>`;
     } else {
-      h += `<div class="big">Crews are assessing the damage</div><div class="sub">We'll have an estimate soon.</div>`;
+      h += `<div class="big">Crews are assessing the damage</div><p class="sub">We'll post an estimate as soon as we have one.</p>`;
     }
     if (e && e.note) h += `<p class="small muted" style="margin:8px 0 0">${esc(e.note)}</p>`;
     if (e && e.drivers && e.drivers.length)
       h += `<div class="why"><h2>Why it's taking this long</h2><ul>${e.drivers.slice(0, 3).map(d => `<li>${esc(cap(d))}</li>`).join("")}</ul></div>`;
   } else if (s.state === "storm_coming") {
+    cls = "storm";
     const st = s.storm || {};
-    h += `<div class="state"><span class="pill warn"><span class="dot"></span>${esc(st.name || "A storm")} arrives in about ${esc(st.eta_hours)} hours</span></div>`;
+    h += `<div class="state">${esc(st.name || "A storm")} is expected in about ${esc(st.eta_hours)} hours</div>`;
     if (s.risk) {
-      h += `<div class="big-label">Your outage risk</div><div class="big">${esc(s.risk.band)}</div>
-            <div class="sub">${esc(cap(s.risk.confidence))} confidence · winds up to ${esc(st.max_wind_mph)} mph</div>`;
-      if (e) h += `<p class="sub" style="margin:10px 0 0">If you lose power, plan for <b>${esc(e.hours_range.replace(" hrs", " hours"))}</b>.</p>`;
+      h += `<div class="label">Chance of an outage at your address</div><div class="big">${esc(s.risk.band)}</div>
+            <p class="sub">Winds up to ${esc(st.max_wind_mph)} mph${e ? `. If you lose power, plan for ${esc(e.hours_range.replace(" hrs", " hours"))}.` : "."}</p>`;
       h += `<div class="why"><h2>Why</h2><ul>${s.risk.top_factors.map(f => `<li>${esc(f)}</li>`).join("")}</ul></div>`;
     } else {
-      h += `<div class="big-label">Your outage risk</div><div class="big">Not enough history</div><div class="sub">${esc(s.general_guidance || "")}</div>`;
+      h += `<div class="label">Chance of an outage at your address</div><div class="big">Not enough history</div><p class="sub">${esc(s.general_guidance || "")}</p>`;
     }
   } else if (s.state === "restored") {
-    h += `<div class="state"><span class="pill good"><span class="dot"></span>Power restored</span></div>
-          <div class="big-label">Power came back</div><div class="big">${esc(s.restored_at)}</div>
-          <div class="sub">Still without power? Tell the assistant and we'll check your line.</div>`;
+    cls = "ok";
+    h += `<div class="state">Your power is back on</div>
+          <div class="label">Restored</div><div class="big">${esc(s.restored_at)}</div>
+          <p class="sub">Still without power? Let us know in the chat and we'll check your line.</p>`;
   } else {
-    h += `<div class="state"><span class="pill good"><span class="dot"></span>Power is on</span></div>
-          <div class="big-label">Your service</div><div class="big">No outage at your address</div>
-          <div class="sub">${s.risk ? `Storm risk for your area: ${esc(s.risk.band)}. ` : ""}We'll text you if that changes.</div>`;
+    cls = "ok";
+    h += `<div class="state">Your power is on</div>
+          <div class="big">No outage at your address</div>
+          <p class="sub">${s.risk ? `Outage risk for your area: ${esc(s.risk.band)}. ` : ""}We'll let you know if that changes.</p>`;
   }
-  if (s.honesty) h += `<div class="meta"><span>How accurate are we? ${esc(s.honesty)}.</span></div>`;
-  $("hero").innerHTML = h;
+  if (s.honesty) h += `<div class="meta">${esc(s.honesty)}.</div>`;
+  el.className = "card status " + cls; el.innerHTML = h;
 
   const acts = s.actions || [];
   $("todo-card").hidden = !acts.length;
@@ -254,16 +293,16 @@ function render(s) {
 
   const pb = s.power_budget || [];
   $("plan").innerHTML = pb.length
-    ? `<p class="small muted" style="margin:0">Hours after the power goes out</p><div class="timeline">${pb.map(i =>
-        `<div class="tl-row"><span class="h">Hour ${esc(i.hour)}</span><span>${esc(i.what)}</span><span class="pill ${i.risk === "likely" ? "bad" : i.risk === "possible" ? "warn" : "good"}">${esc(i.risk)}</span></div>`).join("")}</div>`
-    : `<p class="muted" style="margin:0">${s.state === "out" || s.state === "storm_coming" ? "Tell the assistant about any medical devices, and we'll build a timeline for you." : "Nothing to plan for right now."}</p>`;
+    ? `<p class="small muted" style="margin:4px 0 0">Counted from when the power goes out</p><div class="timeline">${pb.map(i =>
+        `<div class="tl-row"><span class="h">Hour ${esc(i.hour)}</span><span>${esc(i.what)}</span><span class="r ${esc(i.risk)}">${esc(cap(i.risk))}</span></div>`).join("")}</div>`
+    : `<p class="muted" style="margin:8px 0 0">${s.state === "out" || s.state === "storm_coming" ? "Tell us about any medical devices in the chat, and we'll add them to your plan." : "Nothing to plan for right now."}</p>`;
 
   const al = s.alerts || {};
-  const ch = (al.channels || []).map(c => c === "sms" ? "Text" : c === "voice" ? "Phone call" : c).join(" + ");
+  const ch = (al.channels || []).map(c => c === "sms" ? "text message" : c === "voice" ? "phone call" : c).join(" and ");
   const needs = (s.declared_needs || []).map(n => NEED_WORDS[n] || n);
   $("alerts").innerHTML = al.enrolled
-    ? `<p style="margin:0"><span class="pill good">On</span> ${esc(ch)}</p><p class="small muted" style="margin:8px 0 0">We'll tell you when power goes out, when the estimate changes, and when it's back.${needs.length ? ` Because you told us about your ${esc(needs.join(", "))}, we'll also call to check in.` : ""}</p>`
-    : `<p style="margin:0"><span class="pill warn">Off</span> You qualify for outage texts.</p><p class="small muted" style="margin:8px 0 0">Text JOIN to our outage number to turn them on.</p>`;
+    ? `<p style="margin:8px 0 0"><span class="alerts-on">On</span> · by ${esc(ch)}</p><p class="small muted" style="margin:6px 0 0">We'll tell you when power goes out, when the estimate changes, and when it's back.${needs.length ? ` Because you told us about your ${esc(needs.join(", "))}, we'll also call to check on you.` : ""}</p>`
+    : `<p style="margin:8px 0 0"><span class="alerts-on">Off</span> · you qualify for outage texts</p><p class="small muted" style="margin:6px 0 0">Text JOIN to our outage number to turn them on.</p>`;
 }
 function toggleTodo(li) {
   if (!li || !me) return;
@@ -274,12 +313,6 @@ $("todo").addEventListener("click", e => toggleTodo(e.target.closest("li")));
 $("todo").addEventListener("keydown", e => { if (e.key === " " || e.key === "Enter") { e.preventDefault(); toggleTodo(e.target.closest("li")); } });
 
 // ---------- chat ----------
-async function chatMode() {
-  try {
-    const m = await api("/api/chat/status");
-    $("chat-mode").textContent = m.mode === "keyword" ? "Answers from your live outage data" : "AI assistant · answers from your live outage data";
-  } catch {}
-}
 function renderChips() {
   const needs = (me && me.declared_needs) || [];
   const q = ["When will my power be back?", "Why is it taking so long?"];
@@ -297,31 +330,29 @@ function bubble(cls, html) {
 function greet() {
   const s = last; if (!s || !me) return;
   const e = s.estimate;
-  const lead = s.state === "out" ? `I can see your power is out. ${e && e.confirmed_etr ? `Our crews have confirmed it'll be back by ${e.confirmed_etr}.` : e ? `Our best estimate is ${e.likely}.` : ""}`
-    : s.state === "storm_coming" ? `${s.storm ? s.storm.name : "A storm"} is on its way, and I can help you get ready.`
+  const lead = s.state === "out" ? `I see your power is out. ${e && e.confirmed_etr ? `Our crews have confirmed it will be back by ${e.confirmed_etr}.` : e ? `Our current estimate is ${e.likely}.` : ""}`
+    : s.state === "storm_coming" ? `${s.storm ? s.storm.name : "A storm"} is on its way. I can help you get ready.`
     : s.state === "restored" ? "Your power is back on." : "Your power is on right now.";
-  bubble("bot", esc(`Hi ${me.name}. ${lead} Ask me anything about your power, your plan, or staying safe.`));
+  bubble("bot", esc(`Hi ${me.name}. ${lead} How can I help?`));
 }
 async function send(text) {
   text = text.trim(); if (!text || !me) return;
   bubble("me", esc(text)); $("ask-in").value = ""; $("ask-go").disabled = true;
-  const t = document.createElement("div"); t.className = "typing"; t.textContent = "Checking your outage…";
+  const t = document.createElement("div"); t.className = "typing"; t.textContent = "Typing…";
   $("msgs").appendChild(t); $("msgs").scrollTop = 1e9;
   try {
     const r = await api("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ premise_id: me.premise_id, message: text, conversation_id: convo }) });
     t.remove();
-    const how = [...new Set((r.steps || []).map(s => s.label).filter(Boolean))];
-    bubble(r.source === "safety_gate" ? "alert" : "bot", esc(r.text) + (how.length ? `<div class="how">${esc(how.join(" · "))}</div>` : ""));
+    bubble(r.source === "safety_gate" ? "alert" : "bot", esc(r.text));
   } catch {
     t.remove();
-    bubble("bot", "Sorry, I couldn't reach the outage system just now. Please try again in a moment, or call us if it's urgent.");
+    bubble("bot", "Sorry, we couldn't load an answer just now. Please try again in a moment, or call us if it's urgent.");
   } finally { $("ask-go").disabled = false; $("ask-in").focus(); }
 }
 $("ask").onsubmit = e => { e.preventDefault(); send($("ask-in").value); };
-$("fab").onclick = () => { $("chat").scrollIntoView({ behavior: "smooth" }); setTimeout(() => $("ask-in").focus(), 400); };
-let chatVisible = false;
 function updateFab() { $("fab").hidden = !me || chatVisible; }
+$("fab").onclick = () => { $("chat").scrollIntoView({ behavior: "smooth" }); setTimeout(() => $("ask-in").focus(), 400); };
 new IntersectionObserver(([e]) => { chatVisible = e.isIntersecting; updateFab(); }).observe($("chat"));
 
 boot();

@@ -1,3 +1,6 @@
+import base64
+import json
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -333,3 +336,74 @@ def test_waits_can_be_learned_per_storm_size(monkeypatch):
     pooled = fit_start_delays(DS)
     assert small is not None and large is not None
     assert len(small) + len(large) == len(pooled)  # every past repair lands in exactly one size group
+
+
+# ---------- Android SMS gateway ----------
+
+@pytest.fixture
+def gateway(monkeypatch):
+    """Configure the gateway provider and capture outbound requests instead of sending them."""
+    from concierge import outbound
+    monkeypatch.setenv("SMSGATE_USER", "u")
+    monkeypatch.setenv("SMSGATE_PASSWORD", "p")
+    monkeypatch.delenv("SMSGATE_URL", raising=False)
+    monkeypatch.delenv("SMSGATE_SIGNING_KEY", raising=False)
+    sent = []
+
+    class _Resp:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+
+    def fake_urlopen(req, timeout=None):
+        sent.append({"url": req.full_url, "body": json.loads(req.data), "auth": req.headers["Authorization"]})
+        return _Resp()
+
+    monkeypatch.setattr(outbound.urllib.request, "urlopen", fake_urlopen)
+    return sent
+
+
+def _gateway_event(sender, text, msg_id="m1"):
+    return {"deviceId": "d", "event": "sms:received", "id": "e-" + msg_id, "webhookId": "w",
+            "payload": {"messageId": msg_id, "message": text, "sender": sender, "recipient": None,
+                        "simNumber": 1, "receivedAt": "2026-10-24T12:00:00.000+00:00"}}
+
+
+def test_gateway_webhook_replies_by_text(gateway):
+    from concierge import store
+    client = TestClient(app)
+    r = client.post("/sms/gateway", json=_gateway_event("+16145550111", "DEMO"))
+    assert r.status_code == 200 and r.json() == {"ok": True}
+    assert len(gateway) == 1
+    g = gateway[0]
+    assert g["url"] == "https://api.sms-gate.app/3rdparty/v1/messages"
+    assert g["body"]["phoneNumbers"] == ["+16145550111"] and g["body"]["textMessage"]["text"].startswith("You're linked")
+    assert g["auth"] == "Basic " + base64.b64encode(b"u:p").decode()
+    assert store.thread("+16145550111")[-1]["status"] == "sent"
+
+
+def test_gateway_retry_is_not_answered_twice(gateway):
+    client = TestClient(app)
+    client.post("/sms/gateway", json=_gateway_event("+16145550112", "DEMO", "dup-1"))
+    r = client.post("/sms/gateway", json=_gateway_event("+16145550112", "DEMO", "dup-1"))
+    assert r.json().get("duplicate") and len(gateway) == 1
+
+
+def test_gateway_signature_checked(gateway, monkeypatch):
+    import hashlib, hmac, time
+    monkeypatch.setenv("SMSGATE_SIGNING_KEY", "k")
+    client = TestClient(app)
+    raw = json.dumps(_gateway_event("+16145550113", "DEMO", "sig-1")).encode()
+    assert client.post("/sms/gateway", content=raw, headers={"Content-Type": "application/json"}).status_code == 403
+    ts = str(int(time.time()))
+    sig = hmac.new(b"k", raw + ts.encode(), hashlib.sha256).hexdigest()
+    r = client.post("/sms/gateway", content=raw, headers={"Content-Type": "application/json", "X-Timestamp": ts, "X-Signature": sig})
+    assert r.status_code == 200 and len(gateway) == 1
+
+
+def test_gateway_local_mode_url_and_fictional_numbers(gateway, monkeypatch):
+    from concierge import outbound
+    monkeypatch.setenv("SMSGATE_URL", "http://192.168.1.20:8080")
+    assert outbound.send("+16145550114", "hi") == "sent"
+    assert gateway[-1]["url"] == "http://192.168.1.20:8080/message"
+    assert outbound.send("+15550100001", "hi") == "dry_run"  # sample customer numbers are never texted
+    assert outbound.send("web", "hi") == "dry_run"
